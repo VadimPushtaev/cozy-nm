@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl iproute2 wireguard-tools \
+    && apt-get install -y --no-install-recommends curl iproute2 iputils-ping wireguard-tools \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,4 +20,3 @@ RUN poetry install --only main
 
 EXPOSE 8000
 CMD ["uvicorn", "cozy_network_manager.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

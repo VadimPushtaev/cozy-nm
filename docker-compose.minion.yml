@@ -13,7 +13,7 @@ services:
       - /etc/hostname:/host/etc/hostname:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /etc/wireguard:/host/etc/wireguard:ro
+      - /root/wireguard/clients:/host/wireguard/clients:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-

@@ -12,6 +12,8 @@ def test_load_config_and_env_override(tmp_path: Path, monkeypatch):
 mode: head
 node_name: head-one
 listen_port: 9000
+device_scan_interval_seconds: 10
+wireguard_clients_path: /host/wireguard/clients
 known_nodes:
   - name: node-a
     expected_vpn_ip: 10.0.0.2
@@ -32,6 +34,8 @@ dns:
     assert config.mode == "minion"
     assert config.node_name == "head-one"
     assert config.listen_port == 8081
+    assert config.device_scan_interval_seconds == 10
+    assert config.wireguard_clients_path == "/host/wireguard/clients"
     assert config.known_nodes[0].name == "node-a"
     assert str(config.known_nodes[0].minion_api_url) == "http://10.0.0.2:8000/"
     assert config.device_subnets == ["10.46.0.0/24"]

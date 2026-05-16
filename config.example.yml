@@ -4,11 +4,14 @@ listen_host: 0.0.0.0
 listen_port: 8000
 database_url: postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager
 polling_interval_seconds: 60
+device_scan_interval_seconds: 10
 stale_after_seconds: 300
 host_root: /host
 wireguard_interfaces: []
 device_subnets:
   - 10.46.0.0/24
+wireguard_clients_path: /host/wireguard/clients
+minion_port: 8000
 
 known_nodes: []
 

@@ -33,14 +33,17 @@ class AppConfig(BaseModel):
     listen_port: int = 8000
     database_url: str = "postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager"
     polling_interval_seconds: int = 60
+    device_scan_interval_seconds: int = 10
     stale_after_seconds: int = 300
     wireguard_interfaces: list[str] = Field(default_factory=list)
     device_subnets: list[str] = Field(default_factory=lambda: ["10.46.0.0/24"])
+    wireguard_clients_path: str = "/host/wireguard/clients"
+    minion_port: int = 8000
     known_nodes: list[KnownNode] = Field(default_factory=list)
     dns: DnsConfig = Field(default_factory=DnsConfig)
     host_root: str = "/host"
 
-    @field_validator("polling_interval_seconds", "stale_after_seconds")
+    @field_validator("polling_interval_seconds", "device_scan_interval_seconds", "stale_after_seconds")
     @classmethod
     def positive_int(cls, value: int) -> int:
         if value <= 0:
@@ -79,8 +82,15 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         "polling_interval_seconds": _env_int(
             "CNM_POLLING_INTERVAL_SECONDS", config.polling_interval_seconds
         ),
+        "device_scan_interval_seconds": _env_int(
+            "CNM_DEVICE_SCAN_INTERVAL_SECONDS", config.device_scan_interval_seconds
+        ),
         "stale_after_seconds": _env_int("CNM_STALE_AFTER_SECONDS", config.stale_after_seconds),
         "host_root": os.getenv("CNM_HOST_ROOT", config.host_root),
+        "wireguard_clients_path": os.getenv(
+            "CNM_WIREGUARD_CLIENTS_PATH", config.wireguard_clients_path
+        ),
+        "minion_port": _env_int("CNM_MINION_PORT", config.minion_port),
     }
     return config.model_copy(update=overrides)
 

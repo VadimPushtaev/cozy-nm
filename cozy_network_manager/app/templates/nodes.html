@@ -2,25 +2,26 @@
 {% block content %}
 <section class="page-head">
   <h1>Devices</h1>
-  <p>WireGuard peers discovered in {{ device_subnets|join(', ') }}.</p>
+  <p>WireGuard clients loaded from host configs and checked in the background.</p>
 </section>
 <section class="panel">
   <h2>WireGuard devices</h2>
   <table>
-    <thead><tr><th>IP</th><th>Name</th><th>Status</th><th>Handshake</th><th>Via</th><th>Traffic</th><th>Tags</th></tr></thead>
+    <thead><tr><th>Name</th><th>IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Interface</th><th>Endpoint</th><th>Last check</th></tr></thead>
     <tbody>
     {% for device in devices %}
       <tr>
+        <td>{{ device.name }}</td>
         <td class="mono">{{ device.ip }}</td>
-        <td>{{ device.configured_name or '' }}</td>
-        <td><span class="badge {{ 'ok' if device.online else 'warn' }}">{{ 'online' if device.online else 'seen/static' }}</span></td>
-        <td>{{ device.handshake_age_seconds if device.handshake_age_seconds is not none else 'never' }}{% if device.handshake_age_seconds is not none %}s ago{% endif %}</td>
-        <td>{{ device.source_node }}{% if device.interface %} / {{ device.interface }}{% endif %}</td>
-        <td>{{ device.transfer_rx or 0 }}/{{ device.transfer_tx or 0 }}</td>
-        <td>{{ device.tags|join(', ') }}</td>
+        <td><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
+        <td><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
+        <td><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
+        <td>{{ device.interface or '' }}</td>
+        <td>{{ device.endpoint or '' }}</td>
+        <td>{{ device.last_checked_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="7">No WireGuard peers found in {{ device_subnets|join(', ') }} yet.</td></tr>
+      <tr><td colspan="8">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

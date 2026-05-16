@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
@@ -64,6 +64,31 @@ class DnsRecord(Base):
     resolved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
 
 
+class Device(Base):
+    __tablename__ = "devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    ip: Mapped[str] = mapped_column(String(120), index=True)
+    address: Mapped[str] = mapped_column(String(120))
+    public_key: Mapped[str] = mapped_column(String(120), index=True)
+    config_path: Mapped[str] = mapped_column(String(500))
+    interface: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    endpoint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    latest_handshake: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    transfer_rx: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    transfer_tx: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    wg_connected: Mapped[bool] = mapped_column(Boolean, default=False)
+    pingable: Mapped[bool] = mapped_column(Boolean, default=False)
+    minion_available: Mapped[bool] = mapped_column(Boolean, default=False)
+    minion_url: Mapped[str] = mapped_column(String(500))
+    last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=now_utc, onupdate=now_utc
+    )
+
+
 class WarningEvent(Base):
     __tablename__ = "warnings"
 
@@ -72,4 +97,3 @@ class WarningEvent(Base):
     source: Mapped[str] = mapped_column(String(120), index=True)
     message: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)
-

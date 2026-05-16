@@ -5,9 +5,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from cozy_network_manager.app.config import get_config
-from cozy_network_manager.app.db.models import DnsRecord, Node, SnapshotRecord, WarningEvent
+from cozy_network_manager.app.db.models import Device, DnsRecord, Node, SnapshotRecord, WarningEvent
 from cozy_network_manager.app.db.session import get_db
-from cozy_network_manager.app.services.devices import wireguard_device_inventory
+from cozy_network_manager.app.services.devices import device_inventory
 from cozy_network_manager.app.services.nodes import latest_snapshot, node_summary
 from cozy_network_manager.app.ui.templates import templates
 
@@ -25,6 +25,24 @@ def _node_payload(node: Node):
         "tags": sorted(set(node.configured_tags + node.manual_tags)),
         "notes": node.notes,
         "os_override": node.os_override,
+    }
+
+
+def _device_payload(device: Device):
+    return {
+        "name": device.name,
+        "ip": device.ip,
+        "address": device.address,
+        "interface": device.interface,
+        "endpoint": device.endpoint,
+        "latest_handshake": device.latest_handshake,
+        "transfer_rx": device.transfer_rx,
+        "transfer_tx": device.transfer_tx,
+        "wg_connected": device.wg_connected,
+        "pingable": device.pingable,
+        "minion_available": device.minion_available,
+        "minion_url": device.minion_url,
+        "last_checked_at": device.last_checked_at,
     }
 
 
@@ -55,11 +73,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     active_node_names = _active_node_names(config)
     visible_node_names = _visible_node_names(db, active_node_names)
     nodes = node_summary(db, config.stale_after_seconds, active_node_names)
-    devices = wireguard_device_inventory(
-        db, config.device_subnets, config.stale_after_seconds, active_node_names
-    )
+    devices = device_inventory(db)
     network_rows = [
-        {"label": device.configured_name or device.ip, "online": device.online} for device in devices
+        {"label": device.name, "online": device.wg_connected} for device in devices
     ] or [{"label": row["node"].name, "online": row["online"]} for row in nodes]
     dns = db.query(DnsRecord).order_by(DnsRecord.hostname, DnsRecord.record_type).all()
     warnings = _visible_warnings(db, visible_node_names, 10)
@@ -86,9 +102,7 @@ def nodes_page(request: Request, db: Session = Depends(get_db)):
         "nodes.html",
         {
             "nodes": node_summary(db, config.stale_after_seconds, active_node_names),
-            "devices": wireguard_device_inventory(
-                db, config.device_subnets, config.stale_after_seconds, active_node_names
-            ),
+            "devices": device_inventory(db),
             "device_subnets": config.device_subnets,
         },
     )
@@ -168,14 +182,7 @@ def api_nodes(db: Session = Depends(get_db)):
 
 @router.get("/api/v1/devices")
 def api_devices(db: Session = Depends(get_db)):
-    config = get_config()
-    active_node_names = _active_node_names(config)
-    return [
-        device.to_dict()
-        for device in wireguard_device_inventory(
-            db, config.device_subnets, config.stale_after_seconds, active_node_names
-        )
-    ]
+    return [_device_payload(device) for device in device_inventory(db)]
 
 
 @router.get("/api/v1/nodes/{name}")

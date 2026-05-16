@@ -1,175 +1,285 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from ipaddress import ip_address, ip_interface, ip_network
-from typing import Any
+from pathlib import Path
+import shutil
+import subprocess
 
+import httpx
 from sqlalchemy.orm import Session
 
-from cozy_network_manager.app.db.models import Node
-from cozy_network_manager.app.services.nodes import latest_snapshot
+from cozy_network_manager.app.config import AppConfig
+from cozy_network_manager.app.db.models import Device
 
 
 @dataclass(frozen=True)
-class WireGuardDevice:
+class ClientConfig:
+    name: str
     ip: str
-    allowed_ip: str
-    source_node: str
+    address: str
+    public_key: str
+    config_path: str
+
+
+@dataclass(frozen=True)
+class PeerState:
     interface: str
     public_key: str
     endpoint: str | None
     latest_handshake: int | None
-    handshake_age_seconds: int | None
     transfer_rx: int | None
     transfer_tx: int | None
-    online: bool
-    configured_name: str | None = None
-    tags: tuple[str, ...] = ()
 
-    def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data["tags"] = list(self.tags)
-        return data
+
+@dataclass(frozen=True)
+class DeviceStatus:
+    name: str
+    ip: str
+    address: str
+    public_key: str
+    config_path: str
+    interface: str | None
+    endpoint: str | None
+    latest_handshake: int | None
+    transfer_rx: int | None
+    transfer_tx: int | None
+    wg_connected: bool
+    pingable: bool
+    minion_available: bool
+    minion_url: str
+    last_checked_at: datetime
 
 
 def _subnets(raw_subnets: list[str]):
     return [ip_network(raw, strict=False) for raw in raw_subnets]
 
 
-def _device_ip(raw_allowed_ip: str, networks) -> tuple[str, str] | None:
-    try:
-        interface = ip_interface(raw_allowed_ip)
-    except ValueError:
-        try:
-            interface = ip_interface(f"{ip_address(raw_allowed_ip)}/32")
-        except ValueError:
-            return None
-    if any(interface.ip in network for network in networks):
-        return str(interface.ip), str(interface)
+def _read_conf_value(text: str, section: str, key: str) -> str | None:
+    current_section = ""
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current_section = line[1:-1].strip()
+            continue
+        if current_section != section or "=" not in line:
+            continue
+        found_key, value = line.split("=", 1)
+        if found_key.strip() == key:
+            return value.strip()
     return None
 
 
-def _handshake_age(latest_handshake: int | None, now: datetime) -> int | None:
-    if not latest_handshake:
-        return None
-    return max(0, int(now.timestamp() - latest_handshake))
-
-
-def _configured_node_by_ip(
-    db: Session, networks, active_node_names: set[str] | None = None
-) -> dict[str, Node]:
-    nodes: dict[str, Node] = {}
-    for node in db.query(Node).order_by(Node.name).all():
-        if active_node_names is not None and node.name not in active_node_names:
+def _client_ip(address: str, networks) -> str | None:
+    for raw_address in address.split(","):
+        raw_address = raw_address.strip()
+        if not raw_address:
             continue
-        match = _device_ip(node.expected_vpn_ip, networks)
-        if match:
-            nodes[match[0]] = node
-    return nodes
+        try:
+            interface = ip_interface(raw_address)
+        except ValueError:
+            continue
+        if any(interface.ip in network for network in networks):
+            return str(interface.ip)
+    return None
 
 
-def _tags_for(node: Node | None) -> tuple[str, ...]:
-    if node is None:
-        return ()
-    return tuple(sorted(set(node.configured_tags + node.manual_tags)))
+def parse_client_config(config_path: Path, subnets: list[str]) -> ClientConfig | None:
+    networks = _subnets(subnets)
+    text = config_path.read_text(encoding="utf-8")
+    address = _read_conf_value(text, "Interface", "Address")
+    if not address:
+        return None
+    ip = _client_ip(address, networks)
+    if ip is None:
+        return None
 
+    public_key_path = config_path.with_suffix(".pub")
+    public_key = ""
+    if public_key_path.exists():
+        public_key = public_key_path.read_text(encoding="utf-8").strip()
 
-def _device_score(device: WireGuardDevice) -> tuple[int, int, int]:
-    return (
-        1 if device.online else 0,
-        device.latest_handshake or 0,
-        (device.transfer_rx or 0) + (device.transfer_tx or 0),
+    return ClientConfig(
+        name=config_path.stem,
+        ip=ip,
+        address=address,
+        public_key=public_key,
+        config_path=str(config_path),
     )
 
 
-def extract_wireguard_devices(
-    snapshot: dict[str, Any],
-    source_node: str,
-    subnets: list[str],
-    stale_after_seconds: int,
-    now: datetime | None = None,
-    configured_nodes: dict[str, Node] | None = None,
-) -> list[WireGuardDevice]:
-    networks = _subnets(subnets)
-    now = now or datetime.now(timezone.utc)
-    configured_nodes = configured_nodes or {}
-    devices: list[WireGuardDevice] = []
-
-    for iface in snapshot.get("wireguard", []):
-        interface_name = iface.get("name", "")
-        for peer in iface.get("peers", []):
-            for allowed_ip in peer.get("allowed_ips", []):
-                match = _device_ip(allowed_ip, networks)
-                if not match:
-                    continue
-                ip, normalized_allowed_ip = match
-                latest_handshake = peer.get("latest_handshake")
-                age_seconds = _handshake_age(latest_handshake, now)
-                configured_node = configured_nodes.get(ip)
-                devices.append(
-                    WireGuardDevice(
-                        ip=ip,
-                        allowed_ip=normalized_allowed_ip,
-                        source_node=source_node,
-                        interface=interface_name,
-                        public_key=peer.get("public_key", ""),
-                        endpoint=peer.get("endpoint"),
-                        latest_handshake=latest_handshake,
-                        handshake_age_seconds=age_seconds,
-                        transfer_rx=peer.get("transfer_rx"),
-                        transfer_tx=peer.get("transfer_tx"),
-                        online=age_seconds is not None and age_seconds <= stale_after_seconds,
-                        configured_name=configured_node.name if configured_node else None,
-                        tags=_tags_for(configured_node),
-                    )
-                )
-    return devices
-
-
-def wireguard_device_inventory(
-    db: Session,
-    subnets: list[str],
-    stale_after_seconds: int,
-    active_node_names: set[str] | None = None,
-) -> list[WireGuardDevice]:
-    networks = _subnets(subnets)
-    configured_nodes = _configured_node_by_ip(db, networks, active_node_names)
-    by_ip: dict[str, WireGuardDevice] = {}
-    now = datetime.now(timezone.utc)
-
-    for node in db.query(Node).order_by(Node.name).all():
-        snapshot = latest_snapshot(db, node.id)
-        if snapshot is None:
+def load_client_configs(clients_path: str, subnets: list[str]) -> list[ClientConfig]:
+    path = Path(clients_path)
+    if not path.exists() or not path.is_dir():
+        return []
+    clients = []
+    for config_path in sorted(path.glob("*.conf")):
+        try:
+            client = parse_client_config(config_path, subnets)
+        except OSError:
             continue
-        for device in extract_wireguard_devices(
-            snapshot.snapshot,
-            node.name,
-            subnets,
-            stale_after_seconds,
-            now=now,
-            configured_nodes=configured_nodes,
-        ):
-            current = by_ip.get(device.ip)
-            if current is None or _device_score(device) > _device_score(current):
-                by_ip[device.ip] = device
+        if client:
+            clients.append(client)
+    return clients
 
-    for ip, node in configured_nodes.items():
-        if ip not in by_ip:
-            by_ip[ip] = WireGuardDevice(
-                ip=ip,
-                allowed_ip=node.expected_vpn_ip,
-                source_node="configured",
-                interface="",
-                public_key="",
-                endpoint=node.minion_api_url,
-                latest_handshake=None,
-                handshake_age_seconds=None,
-                transfer_rx=None,
-                transfer_tx=None,
-                online=False,
-                configured_name=node.name,
-                tags=_tags_for(node),
+
+def _to_int(value: str) -> int | None:
+    if value in {"", "(none)", "off"}:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def parse_wg_peer_states(output: str) -> dict[str, PeerState]:
+    peers: dict[str, PeerState] = {}
+    for raw_line in output.splitlines():
+        parts = raw_line.strip().split("\t")
+        if len(parts) != 9:
+            continue
+        (
+            interface,
+            public_key,
+            _preshared_key,
+            endpoint,
+            _allowed_ips,
+            latest_handshake,
+            transfer_rx,
+            transfer_tx,
+            _persistent_keepalive,
+        ) = parts
+        peers[public_key] = PeerState(
+            interface=interface,
+            public_key=public_key,
+            endpoint=None if endpoint == "(none)" else endpoint,
+            latest_handshake=_to_int(latest_handshake),
+            transfer_rx=_to_int(transfer_rx),
+            transfer_tx=_to_int(transfer_tx),
+        )
+    return peers
+
+
+def load_wg_peer_states() -> dict[str, PeerState]:
+    if not shutil.which("wg"):
+        return {}
+    result = subprocess.run(
+        ["wg", "show", "all", "dump"],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=5,
+    )
+    if result.returncode != 0:
+        return {}
+    return parse_wg_peer_states(result.stdout)
+
+
+def _is_connected(peer: PeerState | None, stale_after_seconds: int, now: datetime) -> bool:
+    if peer is None or not peer.latest_handshake:
+        return False
+    return now.timestamp() - peer.latest_handshake <= stale_after_seconds
+
+
+def ping_ip(ip: str) -> bool:
+    if not shutil.which("ping"):
+        return False
+    result = subprocess.run(
+        ["ping", "-c", "1", "-W", "1", ip],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=3,
+    )
+    return result.returncode == 0
+
+
+def minion_available(url: str) -> bool:
+    try:
+        response = httpx.get(url.rstrip("/") + "/health", timeout=2)
+    except Exception:
+        return False
+    return response.status_code == 200
+
+
+def scan_wireguard_clients(config: AppConfig) -> list[DeviceStatus]:
+    clients = load_client_configs(config.wireguard_clients_path, config.device_subnets)
+    peers = load_wg_peer_states()
+    now = datetime.now(timezone.utc)
+    statuses = []
+
+    for client in clients:
+        peer = peers.get(client.public_key)
+        minion_url = f"http://{client.ip}:{config.minion_port}"
+        statuses.append(
+            DeviceStatus(
+                name=client.name,
+                ip=client.ip,
+                address=client.address,
+                public_key=client.public_key,
+                config_path=client.config_path,
+                interface=peer.interface if peer else None,
+                endpoint=peer.endpoint if peer else None,
+                latest_handshake=peer.latest_handshake if peer else None,
+                transfer_rx=peer.transfer_rx if peer else None,
+                transfer_tx=peer.transfer_tx if peer else None,
+                wg_connected=_is_connected(peer, config.stale_after_seconds, now),
+                pingable=ping_ip(client.ip),
+                minion_available=minion_available(minion_url),
+                minion_url=minion_url,
+                last_checked_at=now,
             )
+        )
+    return statuses
 
-    return sorted(by_ip.values(), key=lambda device: ip_address(device.ip))
+
+def store_device_statuses(db: Session, statuses: list[DeviceStatus]) -> None:
+    seen_names = {status.name for status in statuses}
+    stale_query = db.query(Device)
+    if seen_names:
+        stale_query = stale_query.filter(Device.name.not_in(seen_names))
+    for stale_device in stale_query.all():
+        db.delete(stale_device)
+
+    for status in statuses:
+        device = db.query(Device).filter(Device.name == status.name).one_or_none()
+        if device is None:
+            device = Device(
+                name=status.name,
+                ip=status.ip,
+                address=status.address,
+                public_key=status.public_key,
+                config_path=status.config_path,
+                minion_url=status.minion_url,
+            )
+            db.add(device)
+        device.ip = status.ip
+        device.address = status.address
+        device.public_key = status.public_key
+        device.config_path = status.config_path
+        device.interface = status.interface
+        device.endpoint = status.endpoint
+        device.latest_handshake = status.latest_handshake
+        device.transfer_rx = status.transfer_rx
+        device.transfer_tx = status.transfer_tx
+        device.wg_connected = status.wg_connected
+        device.pingable = status.pingable
+        device.minion_available = status.minion_available
+        device.minion_url = status.minion_url
+        device.last_checked_at = status.last_checked_at
+    db.commit()
+
+
+def refresh_device_inventory(config: AppConfig) -> None:
+    from cozy_network_manager.app.db.session import SessionLocal
+
+    statuses = scan_wireguard_clients(config)
+    with SessionLocal() as db:
+        store_device_statuses(db, statuses)
+
+
+def device_inventory(db: Session) -> list[Device]:
+    return sorted(db.query(Device).all(), key=lambda device: ip_address(device.ip))

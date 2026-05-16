@@ -7,6 +7,8 @@ services:
       POSTGRES_PASSWORD: cozy
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${CNM_POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cozy -d cozy_network_manager"]
       interval: 5s
@@ -15,26 +17,30 @@ services:
 
   head:
     build: .
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       CNM_CONFIG: /config/config.yml
       CNM_MODE: head
-      CNM_DATABASE_URL: postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager
+      CNM_LISTEN_PORT: ${CNM_LISTEN_PORT:-8000}
+      CNM_DATABASE_URL: postgresql+psycopg://cozy:cozy@127.0.0.1:${CNM_POSTGRES_PORT:-5432}/cozy_network_manager
       CNM_HOST_ROOT: /host
-    ports:
-      - "8000:8000"
+      CNM_WIREGUARD_CLIENTS_PATH: /host/wireguard/clients
+      CNM_DEVICE_SCAN_INTERVAL_SECONDS: 10
     volumes:
       - ./config.example.yml:/config/config.yml:ro
       - /etc/hostname:/host/etc/hostname:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /etc/wireguard:/host/etc/wireguard:ro
+      - /root/wireguard/clients:/host/wireguard/clients:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: ["sh", "-c", "alembic upgrade head && uvicorn cozy_network_manager.app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "alembic upgrade head && uvicorn cozy_network_manager.app.main:app --host 0.0.0.0 --port ${CNM_LISTEN_PORT:-8000}"]
 
 volumes:
   postgres-data:
-
