@@ -1,0 +1,2 @@
+"""Cozy Network Manager."""
+

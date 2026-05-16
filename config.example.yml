@@ -1,0 +1,17 @@
+mode: head
+node_name: cozy-head
+listen_host: 0.0.0.0
+listen_port: 8000
+database_url: postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager
+polling_interval_seconds: 60
+stale_after_seconds: 300
+host_root: /host
+wireguard_interfaces: []
+device_subnets:
+  - 10.46.0.0/24
+
+known_nodes: []
+
+dns:
+  domains: []
+  hostnames: []

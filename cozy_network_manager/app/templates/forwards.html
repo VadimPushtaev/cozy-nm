@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Port forwards</h1>
+  <p>Best-effort socat Docker forwarding inventory.</p>
+</section>
+<section class="panel">
+  <table>
+    <thead><tr><th>Node</th><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
+    <tbody>
+    {% for row in rows %}
+      {% set f = row.forward %}
+      <tr>
+        <td><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
+        <td>{{ f.container_name }}</td>
+        <td>{{ f.source_port or 'unknown' }}</td>
+        <td>{{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</td>
+        <td>{{ f.status }}</td>
+        <td>{{ f.image }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

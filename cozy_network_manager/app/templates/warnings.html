@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Warnings</h1>
+  <p>Collector, polling, permission, WireGuard, Docker, and DNS problems.</p>
+</section>
+<section class="panel">
+  <table>
+    <thead><tr><th>Time</th><th>Node</th><th>Source</th><th>Message</th></tr></thead>
+    <tbody>
+    {% for warning in warnings %}
+      <tr><td>{{ warning.created_at }}</td><td>{{ warning.node_name or '' }}</td><td>{{ warning.source }}</td><td>{{ warning.message }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

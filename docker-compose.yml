@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cozy_network_manager
+      POSTGRES_USER: cozy
+      POSTGRES_PASSWORD: cozy
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cozy -d cozy_network_manager"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  head:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CNM_CONFIG: /config/config.yml
+      CNM_MODE: head
+      CNM_DATABASE_URL: postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager
+      CNM_HOST_ROOT: /host
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.example.yml:/config/config.yml:ro
+      - /etc/hostname:/host/etc/hostname:ro
+      - /etc/os-release:/host/etc/os-release:ro
+      - /etc/wireguard:/host/etc/wireguard:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["sh", "-c", "alembic upgrade head && uvicorn cozy_network_manager.app.main:app --host 0.0.0.0 --port 8000"]
+
+volumes:
+  postgres-data:
+

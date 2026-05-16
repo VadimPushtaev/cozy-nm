@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Devices</h1>
+  <p>WireGuard peers discovered in {{ device_subnets|join(', ') }}.</p>
+</section>
+<section class="panel">
+  <h2>WireGuard devices</h2>
+  <table>
+    <thead><tr><th>IP</th><th>Name</th><th>Status</th><th>Handshake</th><th>Via</th><th>Traffic</th><th>Tags</th></tr></thead>
+    <tbody>
+    {% for device in devices %}
+      <tr>
+        <td class="mono">{{ device.ip }}</td>
+        <td>{{ device.configured_name or '' }}</td>
+        <td><span class="badge {{ 'ok' if device.online else 'warn' }}">{{ 'online' if device.online else 'seen/static' }}</span></td>
+        <td>{{ device.handshake_age_seconds if device.handshake_age_seconds is not none else 'never' }}{% if device.handshake_age_seconds is not none %}s ago{% endif %}</td>
+        <td>{{ device.source_node }}{% if device.interface %} / {{ device.interface }}{% endif %}</td>
+        <td>{{ device.transfer_rx or 0 }}/{{ device.transfer_tx or 0 }}</td>
+        <td>{{ device.tags|join(', ') }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7">No WireGuard peers found in {{ device_subnets|join(', ') }} yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <h2>Configured nodes</h2>
+  <table>
+    <thead><tr><th>Name</th><th>VPN IP</th><th>Minion</th><th>Status</th><th>Snapshot age</th><th>Tags</th></tr></thead>
+    <tbody>
+    {% for row in nodes %}
+      <tr>
+        <td><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
+        <td>{{ row.node.expected_vpn_ip }}</td>
+        <td>{{ row.node.minion_api_url or 'static/local' }}</td>
+        <td><span class="badge {{ 'ok' if row.online else 'warn' }}">{{ 'online' if row.online else 'stale/static' }}</span></td>
+        <td>{{ row.age_seconds|round|int if row.age_seconds is not none else 'never' }}{% if row.age_seconds is not none %}s{% endif %}</td>
+        <td>{{ (row.node.configured_tags + row.node.manual_tags)|join(', ') }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

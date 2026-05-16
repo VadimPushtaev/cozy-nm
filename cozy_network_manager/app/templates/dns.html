@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>DNS mappings</h1>
+  <p>Configured hostnames resolved and mapped to known VPN nodes.</p>
+</section>
+<section class="panel">
+  <table>
+    <thead><tr><th>Hostname</th><th>Type</th><th>Target</th><th>Matched node</th><th>Warning</th><th>Resolved</th></tr></thead>
+    <tbody>
+    {% for record in records %}
+      <tr>
+        <td>{{ record.hostname }}</td><td>{{ record.record_type }}</td><td>{{ record.target }}</td>
+        <td>{{ record.matched_node or '' }}</td>
+        <td>{% if record.outside_vpn or record.warning %}<span class="badge warn">{{ record.warning or 'outside VPN' }}</span>{% endif %}</td>
+        <td>{{ record.resolved_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
+

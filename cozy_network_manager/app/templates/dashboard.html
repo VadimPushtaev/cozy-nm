@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>Dashboard</h1>
+  <p>{{ devices|length }} devices in {{ device_subnets|join(', ') }}, {{ nodes|length }} known nodes, {{ warnings|length }} recent warnings</p>
+</section>
+
+<section class="panel">
+  <h2>Network overview</h2>
+  <div class="graph">
+    <svg viewBox="0 0 900 280" role="img" aria-label="Network overview">
+      {% set total = network_rows|length if network_rows|length else 1 %}
+      {% for row in network_rows %}
+        {% set x = 120 + (loop.index0 * (660 / total)) %}
+        {% set y = 110 + (40 if loop.index0 % 2 else 0) %}
+        {% if loop.index0 > 0 %}
+          <line x1="{{ 120 + ((loop.index0 - 1) * (660 / total)) }}" y1="{{ 110 + (40 if (loop.index0 - 1) % 2 else 0) }}" x2="{{ x }}" y2="{{ y }}" class="edge"/>
+        {% endif %}
+        <circle cx="{{ x }}" cy="{{ y }}" r="32" class="{{ 'node online' if row.online else 'node stale' }}"/>
+        <text x="{{ x }}" y="{{ y + 58 }}" text-anchor="middle">{{ row.label }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+</section>
+
+<section class="grid two">
+  <div class="panel">
+    <h2>WireGuard devices</h2>
+    <table>
+      <thead><tr><th>Device</th><th>Status</th><th>Via</th><th>Endpoint</th></tr></thead>
+      <tbody>
+      {% for device in devices[:8] %}
+        <tr>
+          <td>
+            <span class="mono">{{ device.ip }}</span>
+            {% if device.configured_name %}<br><span class="muted">{{ device.configured_name }}</span>{% endif %}
+          </td>
+          <td>
+            <span class="badge {{ 'ok' if device.online else 'warn' }}">{{ 'online' if device.online else 'seen/static' }}</span>
+            {% if device.handshake_age_seconds is not none %}<br><span class="muted">{{ device.handshake_age_seconds }}s ago</span>{% endif %}
+          </td>
+          <td>{{ device.source_node }}{% if device.interface %} / {{ device.interface }}{% endif %}</td>
+          <td>{{ device.endpoint or '' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4">No WireGuard peers found in {{ device_subnets|join(', ') }} yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>DNS mappings</h2>
+    <table>
+      <thead><tr><th>Host</th><th>Type</th><th>Target</th><th>Node</th></tr></thead>
+      <tbody>
+      {% for record in dns_records[:8] %}
+        <tr>
+          <td>{{ record.hostname }}</td>
+          <td>{{ record.record_type }}</td>
+          <td>{{ record.target or record.warning }}</td>
+          <td>{{ record.matched_node or ('outside VPN' if record.outside_vpn else '') }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Recent warnings</h2>
+  <table>
+    <thead><tr><th>Time</th><th>Node</th><th>Source</th><th>Message</th></tr></thead>
+    <tbody>
+    {% for warning in warnings %}
+      <tr><td>{{ warning.created_at }}</td><td>{{ warning.node_name or '' }}</td><td>{{ warning.source }}</td><td>{{ warning.message }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
