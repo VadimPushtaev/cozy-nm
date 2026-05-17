@@ -88,11 +88,12 @@ class Poller:
             store_snapshot(db, node, snapshot)
 
     def _refresh_dns(self) -> None:
+        domains = self.config.dns_domains()
         hostnames = self.config.dns_hostnames()
-        if not hostnames:
+        if not domains and not hostnames:
             return
         with SessionLocal() as db:
-            refresh_dns_records(db, hostnames)
+            refresh_dns_records(db, domains, hostnames)
 
     def _store_device_scan_error(self, message: str) -> None:
         safe_message = message.splitlines()[0][:500]

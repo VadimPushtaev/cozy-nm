@@ -66,14 +66,22 @@ class AppConfig(BaseModel):
         return value
 
     def dns_hostnames(self) -> list[str]:
-        hostnames = list(self.dns.hostnames)
-        for domain in self.dns.domains:
-            domain = domain.strip().rstrip(".")
-            if not domain:
-                continue
-            for node in self.topology_nodes():
-                hostnames.append(f"{node.name}.{domain}")
-        return sorted(set(hostnames))
+        return sorted(
+            {
+                hostname.strip().rstrip(".")
+                for hostname in self.dns.hostnames
+                if hostname.strip().rstrip(".")
+            }
+        )
+
+    def dns_domains(self) -> list[str]:
+        return sorted(
+            {
+                domain.strip().rstrip(".")
+                for domain in self.dns.domains
+                if domain.strip().rstrip(".")
+            }
+        )
 
     def node_identifier(self) -> str:
         if self.node_ip:

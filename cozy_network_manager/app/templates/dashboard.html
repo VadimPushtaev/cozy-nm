@@ -61,7 +61,7 @@
           <td>{{ record.hostname }}</td>
           <td>{{ record.record_type }}</td>
           <td>{{ record.target or record.warning }}</td>
-          <td>{{ record.matched_node or ('outside VPN' if record.outside_vpn else '') }}</td>
+          <td>{{ record.matched_node or ('unknown IP' if record.outside_vpn else '') }}</td>
         </tr>
       {% endfor %}
       </tbody>

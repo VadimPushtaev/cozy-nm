@@ -102,7 +102,7 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 
 `deployment` is the software placement plan. Device names are discovered from WireGuard client configs, so the deployment config only needs IPs.
 
-`dns.domains` expands to `<known_node.name>.<domain>` for each configured node. Use `dns.hostnames` for additional explicit names.
+`dns.domains` lists DNS zones to inspect, for example `pushtaev.ru`. The collector first tries an authoritative zone transfer so it can see all records. If the DNS provider refuses zone transfer, it falls back to the domain apex plus explicit `dns.hostnames` and records a warning. DNS `A` and `AAAA` records are matched against VPN IPs, WireGuard client endpoints, and the public IPv4 values reported by minions.
 
 Minions report public IPv4 by calling `CNM_PUBLIC_IPV4_URL`, which defaults to `https://ifconfig.me/ip`.
 
@@ -123,5 +123,5 @@ For local head development without Docker, set `CNM_DATABASE_URL` to a reachable
 ## Notes
 
 - WireGuard inspection uses `wg show all dump` when available and reports a warning when missing or denied.
-- DNS inspection resolves only the configured `dns.hostnames`; it does not brute-force subdomains.
+- DNS inspection can only enumerate all records when the authoritative DNS servers allow zone transfer. Otherwise, add important names to `dns.hostnames`.
 - Socat parsing is best-effort. Unknown destinations are displayed as unknown instead of failing collection.

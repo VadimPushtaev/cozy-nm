@@ -49,8 +49,5 @@ dns:
     ]
     assert config.device_subnets == ["10.46.0.0/24"]
     assert config.dns.hostnames == ["vpn.example.com"]
-    assert config.dns_hostnames() == [
-        "10.0.0.1.example.com",
-        "10.0.0.2.example.com",
-        "vpn.example.com",
-    ]
+    assert config.dns_domains() == ["example.com"]
+    assert config.dns_hostnames() == ["vpn.example.com"]
