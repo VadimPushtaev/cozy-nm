@@ -77,6 +77,9 @@ def test_device_public_ip_comes_from_endpoint_host():
     )
 
     assert device.public_ip == "8.8.8.8"
+    assert device.current_public_ip is None
+    device.wg_connected = True
+    assert device.current_public_ip == "8.8.8.8"
 
 
 def test_device_public_ip_ignores_private_endpoint_host():

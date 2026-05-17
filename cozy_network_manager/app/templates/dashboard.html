@@ -39,7 +39,7 @@
         <tr>
           <td>{{ device.name }}</td>
           <td class="mono">{{ device.ip }}</td>
-          <td class="mono">{{ device.public_ip or '' }}</td>
+          <td class="mono">{{ device.current_public_ip or '' }}</td>
           <td><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
           <td><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
           <td><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>

@@ -100,6 +100,10 @@ class Device(Base):
             return None
         return str(parsed) if parsed.is_global else None
 
+    @property
+    def current_public_ip(self) -> str | None:
+        return self.public_ip if self.wg_connected else None
+
 
 class WarningEvent(Base):
     __tablename__ = "warnings"
