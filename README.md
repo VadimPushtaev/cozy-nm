@@ -34,7 +34,23 @@ Copy and edit the example config:
 cp config.example.yml config.yml
 ```
 
-Update `device_subnets`, `wireguard_clients_path`, `known_nodes`, and `dns.hostnames`, then mount that file in `docker-compose.yml` or change the compose volume from `config.example.yml` to `config.yml`.
+Update `device_subnets`, `wireguard_clients_path`, `deployment`, and `dns`, then run:
+
+```bash
+python deploy.py
+```
+
+`config.yml` is intentionally git-ignored so a real topology can stay local. A minimal deployment section looks like:
+
+```yaml
+deployment:
+  head: 10.46.0.1
+  minions:
+    - 10.46.0.1
+    - 10.46.0.5
+    - 10.46.0.6
+minion_port: 18081
+```
 
 Start the head:
 
@@ -52,12 +68,18 @@ On a VPN host that should report local data:
 docker compose -f docker-compose.minion.yml up --build
 ```
 
+For a shared topology config, pass the same config file and override only the local node name:
+
+```bash
+CNM_CONFIG_FILE=./config.yml CNM_NODE_NAME=ubuntu-8gb-hel1-1 docker compose -f docker-compose.minion.yml up --build
+```
+
 The minion serves:
 
 - `GET http://localhost:8000/health`
 - `GET http://localhost:8000/api/v1/snapshot`
 
-Point the head config at the minion's WireGuard-reachable URL, for example `http://10.46.0.2:8000`.
+List minion IPs under `deployment.minions`; the head derives each minion URL from that IP and `minion_port`. Set `minion_port` to a port that does not conflict with existing software on those hosts.
 
 ## Configuration
 
@@ -74,12 +96,19 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 - `CNM_HOST_ROOT=/host`
 - `CNM_WIREGUARD_CLIENTS_PATH=/host/wireguard/clients`
 - `CNM_MINION_PORT=8000`
+- `CNM_PUBLIC_IPV4_URL=https://ifconfig.me/ip`
 
-`wireguard_clients_path` points at the host directory containing client `.conf` and matching `.pub` files. The background scanner reads those configs every 10 seconds, matches each client public key against `wg show all dump`, pings the client IP, and checks `http://<client-ip>:8000/health` for the minion. `device_subnets` controls which client addresses are included. The example config defaults to `10.46.0.0/24`.
+`wireguard_clients_path` points at the host directory containing client `.conf` and matching `.pub` files. The background scanner reads those configs every 10 seconds, matches each client public key against `wg show all dump`, pings the client IP, and checks `http://<client-ip>:<minion_port>/health` for the minion. `device_subnets` controls which client addresses are included. The example config defaults to `10.46.0.0/24`.
+
+`deployment` is the software placement plan. Device names are discovered from WireGuard client configs, so the deployment config only needs IPs.
+
+`dns.domains` expands to `<known_node.name>.<domain>` for each configured node. Use `dns.hostnames` for additional explicit names.
+
+Minions report public IPv4 by calling `CNM_PUBLIC_IPV4_URL`, which defaults to `https://ifconfig.me/ip`.
 
 When running in Docker, the head container must be able to read the host client directory and host WireGuard state. The compose example mounts `/root/wireguard/clients` as read-only and runs the head service with the host network namespace plus `NET_ADMIN` so `wg show all dump` can inspect the host interface. If that is not acceptable for your deployment, run the head directly on the host instead.
 
-The MVP only allows editing manual node tags and notes in the UI. Node identity, expected VPN IP, and minion URLs are config-owned.
+The MVP only allows editing manual node tags and notes in the UI. Node identity and expected VPN IP are config-owned.
 
 ## Local development
 

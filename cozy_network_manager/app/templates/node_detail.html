@@ -24,6 +24,7 @@
       <dl>
         <dt>Snapshot</dt><dd>{{ snapshot.collected_at }}</dd>
         <dt>Hostname</dt><dd>{{ host.hostname }}</dd>
+        <dt>Public IPv4</dt><dd>{{ host.public_ipv4 or '' }}</dd>
         <dt>OS</dt><dd>{{ host.os_name }} {{ host.os_version or '' }}</dd>
         <dt>Kernel</dt><dd>{{ host.kernel_version }}</dd>
         <dt>Architecture</dt><dd>{{ host.architecture }}</dd>
@@ -67,4 +68,3 @@
 </section>
 {% endif %}
 {% endblock %}
-

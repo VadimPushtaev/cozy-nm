@@ -47,7 +47,7 @@ def _device_payload(device: Device):
 
 
 def _active_node_names(config) -> set[str]:
-    return {config.node_name, *(known.name for known in config.known_nodes)}
+    return {config.node_identifier(), *(known.name for known in config.topology_nodes())}
 
 
 def _visible_node_names(db: Session, active_node_names: set[str]) -> set[str]:

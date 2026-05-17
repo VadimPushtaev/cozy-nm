@@ -12,8 +12,13 @@ device_subnets:
   - 10.46.0.0/24
 wireguard_clients_path: /host/wireguard/clients
 minion_port: 8000
+public_ipv4_url: https://ifconfig.me/ip
 
 known_nodes: []
+minions: []
+deployment:
+  head:
+  minions: []
 
 dns:
   domains: []

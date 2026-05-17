@@ -17,6 +17,7 @@ class CollectorMessage(BaseModel):
 
 class HostInfo(BaseModel):
     hostname: str | None = None
+    public_ipv4: str | None = None
     os_name: str | None = None
     os_version: str | None = None
     kernel_version: str | None = None
@@ -73,4 +74,3 @@ class Snapshot(BaseModel):
     socat_forwards: list[SocatForward] = Field(default_factory=list)
     warnings: list[CollectorMessage] = Field(default_factory=list)
     errors: list[CollectorMessage] = Field(default_factory=list)
-

@@ -14,15 +14,17 @@ node_name: head-one
 listen_port: 9000
 device_scan_interval_seconds: 10
 wireguard_clients_path: /host/wireguard/clients
-known_nodes:
-  - name: node-a
-    expected_vpn_ip: 10.0.0.2
-    minion_api_url: http://10.0.0.2:8000
-    tags: [linux]
+public_ipv4_url: https://ifconfig.me/ip
+deployment:
+  head: 10.0.0.1
+  minions:
+    - 10.0.0.1
+    - 10.0.0.2
 device_subnets:
   - 10.46.0.0/24
 dns:
-  hostnames: [node-a.example.com]
+  domains: [example.com]
+  hostnames: [vpn.example.com]
 """,
         encoding="utf-8",
     )
@@ -36,7 +38,19 @@ dns:
     assert config.listen_port == 8081
     assert config.device_scan_interval_seconds == 10
     assert config.wireguard_clients_path == "/host/wireguard/clients"
-    assert config.known_nodes[0].name == "node-a"
-    assert str(config.known_nodes[0].minion_api_url) == "http://10.0.0.2:8000/"
+    assert config.public_ipv4_url == "https://ifconfig.me/ip"
+    assert [(node.name, node.expected_vpn_ip) for node in config.topology_nodes()] == [
+        ("10.0.0.1", "10.0.0.1"),
+        ("10.0.0.2", "10.0.0.2"),
+    ]
+    assert config.minion_targets() == [
+        ("10.0.0.1", "http://10.0.0.1:8000"),
+        ("10.0.0.2", "http://10.0.0.2:8000"),
+    ]
     assert config.device_subnets == ["10.46.0.0/24"]
-    assert config.dns.hostnames == ["node-a.example.com"]
+    assert config.dns.hostnames == ["vpn.example.com"]
+    assert config.dns_hostnames() == [
+        "10.0.0.1.example.com",
+        "10.0.0.2.example.com",
+        "vpn.example.com",
+    ]

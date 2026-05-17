@@ -26,13 +26,14 @@ services:
     environment:
       CNM_CONFIG: /config/config.yml
       CNM_MODE: head
+      CNM_NODE_IP: ${CNM_NODE_IP:-}
       CNM_LISTEN_PORT: ${CNM_LISTEN_PORT:-8000}
       CNM_DATABASE_URL: postgresql+psycopg://cozy:cozy@127.0.0.1:${CNM_POSTGRES_PORT:-5432}/cozy_network_manager
       CNM_HOST_ROOT: /host
       CNM_WIREGUARD_CLIENTS_PATH: /host/wireguard/clients
       CNM_DEVICE_SCAN_INTERVAL_SECONDS: 10
     volumes:
-      - ./config.example.yml:/config/config.yml:ro
+      - ${CNM_CONFIG_FILE:-./config.example.yml}:/config/config.yml:ro
       - /etc/hostname:/host/etc/hostname:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /etc/wireguard:/host/etc/wireguard:ro

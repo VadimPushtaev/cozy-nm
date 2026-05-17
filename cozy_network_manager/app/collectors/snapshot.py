@@ -11,7 +11,7 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
     warnings = []
     errors = []
 
-    host, host_warnings = collect_host(config.host_root)
+    host, host_warnings = collect_host(config.host_root, config.public_ipv4_url)
     warnings.extend(host_warnings)
 
     try:
@@ -38,4 +38,3 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
         warnings=warnings,
         errors=errors,
     )
-

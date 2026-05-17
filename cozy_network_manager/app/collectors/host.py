@@ -4,8 +4,11 @@ import json
 import platform
 import socket
 import subprocess
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from cozy_network_manager.app.schemas import CollectorMessage, HostInfo
 
@@ -77,16 +80,33 @@ def _ip_interfaces() -> tuple[list[dict[str, Any]], list[CollectorMessage]]:
     return interfaces, []
 
 
-def collect_host(host_root: str = "/host") -> tuple[HostInfo, list[CollectorMessage]]:
+def collect_public_ipv4(url: str = "https://ifconfig.me/ip") -> tuple[str | None, CollectorMessage | None]:
+    try:
+        response = httpx.get(url, timeout=3)
+        response.raise_for_status()
+        value = response.text.strip()
+        IPv4Address(value)
+    except Exception as exc:
+        return None, CollectorMessage(source="public-ip", message=f"cannot fetch public IPv4: {exc}")
+    return value, None
+
+
+def collect_host(
+    host_root: str = "/host", public_ipv4_url: str = "https://ifconfig.me/ip"
+) -> tuple[HostInfo, list[CollectorMessage]]:
     root = Path(host_root)
     hostname = _read_text(root / "etc/hostname") or socket.gethostname()
     os_name, os_version = _parse_os_release(
         _read_text(root / "etc/os-release") or _read_text(Path("/etc/os-release"))
     )
     interfaces, warnings = _ip_interfaces()
+    public_ipv4, public_ipv4_warning = collect_public_ipv4(public_ipv4_url)
+    if public_ipv4_warning:
+        warnings.append(public_ipv4_warning)
     return (
         HostInfo(
             hostname=hostname,
+            public_ipv4=public_ipv4,
             os_name=os_name,
             os_version=os_version,
             kernel_version=platform.release(),
@@ -96,4 +116,3 @@ def collect_host(host_root: str = "/host") -> tuple[HostInfo, list[CollectorMess
         ),
         warnings,
     )
-

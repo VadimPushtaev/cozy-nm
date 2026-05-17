@@ -60,16 +60,14 @@ class Poller:
     async def poll_once(self) -> None:
         await asyncio.to_thread(self._collect_local)
         async with httpx.AsyncClient(timeout=10) as client:
-            for known in self.config.known_nodes:
-                if not known.minion_api_url:
-                    continue
-                await self._poll_minion(client, known.name, str(known.minion_api_url))
+            for name, url in self.config.minion_targets():
+                await self._poll_minion(client, name, url)
         await asyncio.to_thread(self._refresh_dns)
 
     def _collect_local(self) -> None:
         snapshot = collect_snapshot(self.config)
         with SessionLocal() as db:
-            node = get_or_create_node(db, self.config.node_name, "local")
+            node = get_or_create_node(db, self.config.node_identifier(), "local")
             store_snapshot(db, node, snapshot)
 
     async def _poll_minion(self, client: httpx.AsyncClient, name: str, url: str) -> None:
@@ -90,7 +88,7 @@ class Poller:
             store_snapshot(db, node, snapshot)
 
     def _refresh_dns(self) -> None:
-        hostnames = self.config.dns.hostnames
+        hostnames = self.config.dns_hostnames()
         if not hostnames:
             return
         with SessionLocal() as db:

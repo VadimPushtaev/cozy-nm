@@ -4,12 +4,14 @@ services:
     environment:
       CNM_CONFIG: /config/config.yml
       CNM_MODE: minion
-      CNM_NODE_NAME: cozy-minion
+      CNM_NODE_NAME: ${CNM_NODE_NAME:-cozy-minion}
+      CNM_NODE_IP: ${CNM_NODE_IP:-}
+      CNM_LISTEN_PORT: ${CNM_MINION_PORT:-8000}
       CNM_HOST_ROOT: /host
     ports:
-      - "8000:8000"
+      - "${CNM_MINION_PORT:-8000}:${CNM_MINION_PORT:-8000}"
     volumes:
-      - ./config.example.yml:/config/config.yml:ro
+      - ${CNM_CONFIG_FILE:-./config.example.yml}:/config/config.yml:ro
       - /etc/hostname:/host/etc/hostname:ro
       - /etc/os-release:/host/etc/os-release:ro
       - /etc/wireguard:/host/etc/wireguard:ro
@@ -17,3 +19,4 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: ["uvicorn", "cozy_network_manager.app.main:app", "--host", "0.0.0.0", "--port", "${CNM_MINION_PORT:-8000}"]

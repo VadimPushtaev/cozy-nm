@@ -12,16 +12,20 @@ def create_tables() -> None:
 
 
 def sync_configured_nodes(db: Session, config: AppConfig) -> None:
-    for known in config.known_nodes:
+    minion_ips = set(config.deployment.minions)
+    for known in config.topology_nodes():
         node = db.query(Node).filter(Node.name == known.name).one_or_none()
         if node is None:
             node = Node(name=known.name, expected_vpn_ip=known.expected_vpn_ip)
             db.add(node)
         node.expected_vpn_ip = known.expected_vpn_ip
-        node.minion_api_url = str(known.minion_api_url) if known.minion_api_url else None
+        node.minion_api_url = (
+            f"http://{known.expected_vpn_ip}:{config.minion_port}"
+            if known.name in config.minions or known.expected_vpn_ip in minion_ips
+            else None
+        )
         node.configured_tags = known.tags
         if not node.notes and known.notes:
             node.notes = known.notes
         node.os_override = known.os_override
     db.commit()
-

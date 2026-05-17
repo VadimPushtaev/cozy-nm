@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import AnyHttpUrl, BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 Mode = Literal["head", "minion"]
@@ -15,7 +15,6 @@ Mode = Literal["head", "minion"]
 class KnownNode(BaseModel):
     name: str
     expected_vpn_ip: str
-    minion_api_url: AnyHttpUrl | None = None
     tags: list[str] = Field(default_factory=list)
     notes: str = ""
     os_override: str | None = None
@@ -26,9 +25,22 @@ class DnsConfig(BaseModel):
     hostnames: list[str] = Field(default_factory=list)
 
 
+class DeploymentConfig(BaseModel):
+    head: str | None = None
+    minions: list[str] = Field(default_factory=list)
+
+    def ips(self) -> list[str]:
+        values = []
+        if self.head:
+            values.append(self.head)
+        values.extend(self.minions)
+        return sorted(set(values))
+
+
 class AppConfig(BaseModel):
     mode: Mode = "head"
     node_name: str = "cozy-head"
+    node_ip: str | None = None
     listen_host: str = "0.0.0.0"
     listen_port: int = 8000
     database_url: str = "postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager"
@@ -39,7 +51,10 @@ class AppConfig(BaseModel):
     device_subnets: list[str] = Field(default_factory=lambda: ["10.46.0.0/24"])
     wireguard_clients_path: str = "/host/wireguard/clients"
     minion_port: int = 8000
+    public_ipv4_url: str = "https://ifconfig.me/ip"
     known_nodes: list[KnownNode] = Field(default_factory=list)
+    minions: list[str] = Field(default_factory=list)
+    deployment: DeploymentConfig = Field(default_factory=DeploymentConfig)
     dns: DnsConfig = Field(default_factory=DnsConfig)
     host_root: str = "/host"
 
@@ -49,6 +64,52 @@ class AppConfig(BaseModel):
         if value <= 0:
             raise ValueError("must be greater than zero")
         return value
+
+    def dns_hostnames(self) -> list[str]:
+        hostnames = list(self.dns.hostnames)
+        for domain in self.dns.domains:
+            domain = domain.strip().rstrip(".")
+            if not domain:
+                continue
+            for node in self.topology_nodes():
+                hostnames.append(f"{node.name}.{domain}")
+        return sorted(set(hostnames))
+
+    def node_identifier(self) -> str:
+        if self.node_ip:
+            return self.node_ip
+        if self.mode == "head" and self.deployment.head:
+            return self.deployment.head
+        return self.node_name
+
+    def topology_nodes(self) -> list[KnownNode]:
+        if self.known_nodes:
+            return self.known_nodes
+        return [
+            KnownNode(name=ip, expected_vpn_ip=ip)
+            for ip in self.deployment.ips()
+        ]
+
+    def minion_targets(self, include_self: bool = False) -> list[tuple[str, str]]:
+        if self.deployment.minions:
+            current = self.node_ip or (self.deployment.head if self.mode == "head" else None)
+            targets = []
+            for ip in self.deployment.minions:
+                if not include_self and current and ip == current:
+                    continue
+                targets.append((ip, f"http://{ip}:{self.minion_port}"))
+            return targets
+
+        nodes_by_name = {node.name: node for node in self.topology_nodes()}
+        targets: list[tuple[str, str]] = []
+        for name in self.minions:
+            if not include_self and name == self.node_identifier():
+                continue
+            node = nodes_by_name.get(name)
+            if node is None:
+                continue
+            targets.append((name, f"http://{node.expected_vpn_ip}:{self.minion_port}"))
+        return targets
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -76,6 +137,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     overrides: dict[str, Any] = {
         "mode": os.getenv("CNM_MODE", config.mode),
         "node_name": os.getenv("CNM_NODE_NAME", config.node_name),
+        "node_ip": os.getenv("CNM_NODE_IP", config.node_ip or "") or None,
         "listen_host": os.getenv("CNM_LISTEN_HOST", config.listen_host),
         "listen_port": _env_int("CNM_LISTEN_PORT", config.listen_port),
         "database_url": os.getenv("CNM_DATABASE_URL", config.database_url),
@@ -91,6 +153,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             "CNM_WIREGUARD_CLIENTS_PATH", config.wireguard_clients_path
         ),
         "minion_port": _env_int("CNM_MINION_PORT", config.minion_port),
+        "public_ipv4_url": os.getenv("CNM_PUBLIC_IPV4_URL", config.public_ipv4_url),
     }
     return config.model_copy(update=overrides)
 
