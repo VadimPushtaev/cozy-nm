@@ -12,6 +12,7 @@ DEST_PATTERNS = [
     re.compile(r"([^:,\s]+):(\d+)$"),
 ]
 LISTEN_PATTERN = re.compile(r"(?:tcp|tcp4|tcp6)-listen:(\d+)", re.IGNORECASE)
+SOCAT_BRIDGE_ENV_KEYS = {"LISTEN_PORT", "TARGET_HOST", "TARGET_PORT"}
 
 
 def _command_text(command: str | list[str] | None) -> str:
@@ -33,20 +34,27 @@ def is_likely_socat(container: DockerContainer) -> bool:
     return "socat" in text
 
 
+def _env_int(environment: dict[str, str], key: str) -> int | None:
+    value = environment.get(key)
+    if value is None or not value.isdigit():
+        return None
+    return int(value)
+
+
 def infer_socat_forward(container: DockerContainer) -> SocatForward:
     command = _command_text(container.command)
     tokens = shlex.split(command) if command else []
-    source_port: int | None = None
-    destination_host: str | None = None
-    destination_port: int | None = None
+    source_port = _env_int(container.environment, "LISTEN_PORT")
+    destination_host = container.environment.get("TARGET_HOST")
+    destination_port = _env_int(container.environment, "TARGET_PORT")
 
     for token in tokens:
         listen_match = LISTEN_PATTERN.search(token)
-        if listen_match:
+        if listen_match and source_port is None:
             source_port = int(listen_match.group(1))
         for pattern in DEST_PATTERNS:
             match = pattern.search(token)
-            if match and "listen" not in token.lower():
+            if match and "listen" not in token.lower() and destination_host is None:
                 destination_host = match.group(1)
                 destination_port = int(match.group(2))
 
@@ -77,15 +85,21 @@ def detect_socat_forwards(containers: list[DockerContainer]) -> list[SocatForwar
     return [infer_socat_forward(container) for container in containers if is_likely_socat(container)]
 
 
-def env_list_to_dict(env: list[str] | dict[str, Any] | None) -> dict[str, str]:
+def env_list_to_dict(
+    env: list[str] | dict[str, Any] | None, allowed_keys: set[str] | None = None
+) -> dict[str, str]:
     if not env:
         return {}
     if isinstance(env, dict):
-        return {str(key): str(value) for key, value in env.items()}
+        return {
+            str(key): str(value)
+            for key, value in env.items()
+            if allowed_keys is None or str(key) in allowed_keys
+        }
     result: dict[str, str] = {}
     for item in env:
         if "=" in item:
             key, value = item.split("=", 1)
-            result[key] = value
+            if allowed_keys is None or key in allowed_keys:
+                result[key] = value
     return result
-

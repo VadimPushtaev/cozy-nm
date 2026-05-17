@@ -37,3 +37,28 @@ def test_detect_socat_and_fallback_source_port():
     assert forwards[0].source_port == 9000
     assert forwards[0].destination_host is None
 
+
+def test_parse_socat_bridge_environment():
+    container = DockerContainer(
+        id="abc",
+        name="bridge-15173",
+        image="socat-bridge:latest",
+        status="running",
+        command=[
+            "/bin/sh",
+            "-c",
+            "socat TCP-LISTEN:${LISTEN_PORT},reuseaddr,fork TCP:${TARGET_HOST}:${TARGET_PORT}",
+        ],
+        published_ports={"15173/tcp": [{"HostIp": "0.0.0.0", "HostPort": "15173"}]},
+        environment={
+            "LISTEN_PORT": "15173",
+            "TARGET_HOST": "10.46.0.6",
+            "TARGET_PORT": "15173",
+        },
+    )
+
+    forward = infer_socat_forward(container)
+
+    assert forward.source_port == 15173
+    assert forward.destination_host == "10.46.0.6"
+    assert forward.destination_port == 15173

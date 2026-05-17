@@ -202,6 +202,15 @@ dd {
   stroke-width: 2;
 }
 
+.graph .edge.online {
+  stroke: var(--ok);
+}
+
+.graph .edge.stale {
+  stroke: #c79a4a;
+  stroke-dasharray: 6 6;
+}
+
 .graph .node {
   stroke: #102a3a;
   stroke-width: 3;
@@ -215,9 +224,18 @@ dd {
   fill: #fff1d6;
 }
 
+.graph .node.gateway {
+  fill: #e3edf7;
+}
+
 .graph text {
   fill: var(--text);
   font-size: 13px;
+}
+
+.graph text.subtext {
+  fill: var(--muted);
+  font-size: 11px;
 }
 
 @media (max-width: 760px) {

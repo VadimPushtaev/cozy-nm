@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from cozy_network_manager.app.collectors.socat import detect_socat_forwards, env_list_to_dict
+from cozy_network_manager.app.collectors.socat import (
+    SOCAT_BRIDGE_ENV_KEYS,
+    detect_socat_forwards,
+    env_list_to_dict,
+)
 from cozy_network_manager.app.schemas import CollectorMessage, DockerContainer, SocatForward
 
 
@@ -32,7 +36,7 @@ def collect_docker() -> tuple[list[DockerContainer], list[SocatForward], list[Co
                     status=state.get("Status") or container.status,
                     command=config.get("Cmd") or config.get("Entrypoint"),
                     published_ports=network.get("Ports") or {},
-                    environment=env_list_to_dict(config.get("Env")),
+                    environment=env_list_to_dict(config.get("Env"), SOCAT_BRIDGE_ENV_KEYS),
                 )
             )
         except Exception as exc:
@@ -40,4 +44,3 @@ def collect_docker() -> tuple[list[DockerContainer], list[SocatForward], list[Co
                 CollectorMessage(source="docker", message=f"failed to inspect container: {exc}")
             )
     return collected, detect_socat_forwards(collected), warnings
-

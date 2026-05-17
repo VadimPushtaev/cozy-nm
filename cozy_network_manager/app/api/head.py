@@ -67,6 +67,25 @@ def _visible_warnings(db: Session, visible_node_names: set[str], limit: int) -> 
     ][:limit]
 
 
+def _socat_forward_rows(db: Session):
+    devices_by_ip = {device.ip: device for device in device_inventory(db)}
+    rows = []
+    for node in db.query(Node).order_by(Node.name).all():
+        snapshot = latest_snapshot(db, node.id)
+        if not snapshot:
+            continue
+        for forward in snapshot.snapshot.get("socat_forwards", []):
+            rows.append(
+                {
+                    "node": node,
+                    "forward": forward,
+                    "snapshot": snapshot,
+                    "destination_device": devices_by_ip.get(forward.get("destination_host")),
+                }
+            )
+    return rows
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     config = get_config()
@@ -78,6 +97,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         {"label": device.name, "online": device.wg_connected} for device in devices
     ] or [{"label": row["node"].name, "online": row["online"]} for row in nodes]
     dns = db.query(DnsRecord).order_by(DnsRecord.hostname, DnsRecord.record_type).all()
+    forward_rows = _socat_forward_rows(db)
     warnings = _visible_warnings(db, visible_node_names, 10)
     return templates.TemplateResponse(
         request,
@@ -88,6 +108,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "network_rows": network_rows,
             "device_subnets": config.device_subnets,
             "dns_records": dns,
+            "forward_rows": forward_rows,
             "warnings": warnings,
         },
     )
@@ -145,14 +166,7 @@ def dns_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/forwards", response_class=HTMLResponse)
 def forwards_page(request: Request, db: Session = Depends(get_db)):
-    rows = []
-    for node in db.query(Node).order_by(Node.name).all():
-        snapshot = latest_snapshot(db, node.id)
-        if not snapshot:
-            continue
-        for forward in snapshot.snapshot.get("socat_forwards", []):
-            rows.append({"node": node, "forward": forward, "snapshot": snapshot})
-    return templates.TemplateResponse(request, "forwards.html", {"rows": rows})
+    return templates.TemplateResponse(request, "forwards.html", {"rows": _socat_forward_rows(db)})
 
 
 @router.get("/warnings", response_class=HTMLResponse)

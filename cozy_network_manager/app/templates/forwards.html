@@ -2,7 +2,7 @@
 {% block content %}
 <section class="page-head">
   <h1>Port forwards</h1>
-  <p>Best-effort socat Docker forwarding inventory.</p>
+  <p>Socat bridge containers discovered from the host Docker socket.</p>
 </section>
 <section class="panel">
   <table>
@@ -14,7 +14,13 @@
         <td><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
         <td>{{ f.container_name }}</td>
         <td>{{ f.source_port or 'unknown' }}</td>
-        <td>{{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</td>
+        <td>
+          {% if row.destination_device %}
+            {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
+          {% else %}
+            {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
+          {% endif %}
+        </td>
         <td>{{ f.status }}</td>
         <td>{{ f.image }}</td>
       </tr>
@@ -23,4 +29,3 @@
   </table>
 </section>
 {% endblock %}
-

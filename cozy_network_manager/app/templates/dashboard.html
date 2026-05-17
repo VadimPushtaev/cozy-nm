@@ -9,15 +9,21 @@
   <h2>Network overview</h2>
   <div class="graph">
     <svg viewBox="0 0 900 280" role="img" aria-label="Network overview">
-      {% set total = network_rows|length if network_rows|length else 1 %}
-      {% for row in network_rows %}
-        {% set x = 120 + (loop.index0 * (660 / total)) %}
-        {% set y = 110 + (40 if loop.index0 % 2 else 0) %}
-        {% if loop.index0 > 0 %}
-          <line x1="{{ 120 + ((loop.index0 - 1) * (660 / total)) }}" y1="{{ 110 + (40 if (loop.index0 - 1) % 2 else 0) }}" x2="{{ x }}" y2="{{ y }}" class="edge"/>
-        {% endif %}
-        <circle cx="{{ x }}" cy="{{ y }}" r="32" class="{{ 'node online' if row.online else 'node stale' }}"/>
-        <text x="{{ x }}" y="{{ y + 58 }}" text-anchor="middle">{{ row.label }}</text>
+      {% set center_x = 450 %}
+      {% set center_y = 135 %}
+      {% set positions = [
+        (170, 70), (300, 215), (450, 55), (600, 215),
+        (730, 70), (170, 205), (730, 205), (300, 55)
+      ] %}
+      <circle cx="{{ center_x }}" cy="{{ center_y }}" r="38" class="node gateway"/>
+      <text x="{{ center_x }}" y="{{ center_y + 62 }}" text-anchor="middle">10.46.0.1</text>
+      <text x="{{ center_x }}" y="{{ center_y + 80 }}" text-anchor="middle" class="subtext">VPN gateway</text>
+      {% for device in devices[:8] %}
+        {% set pos = positions[loop.index0] %}
+        <line x1="{{ center_x }}" y1="{{ center_y }}" x2="{{ pos[0] }}" y2="{{ pos[1] }}" class="edge {{ 'online' if device.wg_connected else 'stale' }}"/>
+        <circle cx="{{ pos[0] }}" cy="{{ pos[1] }}" r="30" class="{{ 'node online' if device.wg_connected else 'node stale' }}"/>
+        <text x="{{ pos[0] }}" y="{{ pos[1] + 52 }}" text-anchor="middle">{{ device.name }}</text>
+        <text x="{{ pos[0] }}" y="{{ pos[1] + 70 }}" text-anchor="middle" class="subtext">{{ device.ip }}</text>
       {% endfor %}
     </svg>
   </div>
@@ -61,6 +67,33 @@
       </tbody>
     </table>
   </div>
+</section>
+
+<section class="panel">
+  <h2>Socat bridges</h2>
+  <table>
+    <thead><tr><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
+    <tbody>
+    {% for row in forward_rows[:8] %}
+      {% set f = row.forward %}
+      <tr>
+        <td>{{ f.container_name }}</td>
+        <td>{{ f.source_port or 'unknown' }}</td>
+        <td>
+          {% if row.destination_device %}
+            {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
+          {% else %}
+            {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
+          {% endif %}
+        </td>
+        <td><span class="badge {{ 'ok' if f.status == 'running' else 'warn' }}">{{ f.status }}</span></td>
+        <td>{{ f.image }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5">No socat bridge containers found yet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
 </section>
 
 <section class="panel">
