@@ -4,6 +4,7 @@ import argparse
 import os
 import shlex
 import subprocess
+import sys
 import textwrap
 from ipaddress import ip_address
 from pathlib import Path
@@ -15,6 +16,14 @@ DEFAULT_CONFIG = ROOT / "config.yml"
 DEFAULT_REMOTE_DIR = "/root/cozy-nm"
 PROJECT_NAME = "cozy-nm"
 DEFAULT_STARTUP_TIMEOUT_SECONDS = 120
+SSH_OPTIONS = [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "ConnectTimeout=10",
+]
 EXCLUDES = [
     ".git",
     ".venv",
@@ -94,8 +103,45 @@ def run(args: list[str], *, stdin: Any = None) -> None:
     subprocess.run(args, stdin=stdin, check=True, cwd=ROOT)
 
 
+def ssh_args(host: str, command: str) -> list[str]:
+    return ["ssh", *SSH_OPTIONS, f"root@{host}", command]
+
+
 def ssh(host: str, command: str) -> None:
-    run(["ssh", "-o", "BatchMode=yes", f"root@{host}", command])
+    run(ssh_args(host, command))
+
+
+def explain_ssh_failure(host: str, stderr: str) -> None:
+    print(f"Cannot reach root@{host} over SSH.", file=sys.stderr)
+    if "Host key verification failed" in stderr or "REMOTE HOST IDENTIFICATION HAS CHANGED" in stderr:
+        print(
+            "The saved SSH host key does not match this machine. "
+            "If this IP was reinstalled or reassigned, run:",
+            file=sys.stderr,
+        )
+        print(f"  ssh-keygen -R {host}", file=sys.stderr)
+        print(f"  ssh root@{host} true", file=sys.stderr)
+        print("Then rerun: python deploy.py", file=sys.stderr)
+    elif "Permission denied" in stderr:
+        print(f"SSH auth failed. Check that root login/key auth works: ssh root@{host}", file=sys.stderr)
+    elif stderr.strip():
+        print(stderr.rstrip(), file=sys.stderr)
+
+
+def verify_ssh(host: str) -> None:
+    args = ssh_args(host, "true")
+    print(f"+ {shlex.join(args)}")
+    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True)
+    if result.returncode == 0:
+        return
+    explain_ssh_failure(host, result.stderr)
+    raise subprocess.CalledProcessError(result.returncode, args, result.stdout, result.stderr)
+
+
+def verify_ssh_hosts(hosts: list[str]) -> None:
+    print("Checking SSH access before touching any host")
+    for host in hosts:
+        verify_ssh(host)
 
 
 def remote_compose_helpers() -> str:
@@ -180,8 +226,7 @@ def copy_tree(host: str, remote_dir: str) -> None:
     tar_args = ["tar", *[f"--exclude={item}" for item in EXCLUDES], "-czf", "-", "."]
     ssh_args = [
         "ssh",
-        "-o",
-        "BatchMode=yes",
+        *SSH_OPTIONS,
         f"root@{host}",
         f"tar -xzf - -C {shlex.quote(remote_dir)}",
     ]
@@ -270,6 +315,7 @@ def main() -> None:
     if startup_timeout < 10:
         raise ValueError("--startup-timeout must be at least 10 seconds")
 
+    verify_ssh_hosts(targets)
     print(f"Deploying head {head} and minions {', '.join(targets)}")
     for host in targets:
         remote_cleanup(host, remote_dir)
