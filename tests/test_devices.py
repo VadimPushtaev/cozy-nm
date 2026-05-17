@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from cozy_network_manager.app.db.models import Device
 from cozy_network_manager.app.services.devices import (
     load_client_configs,
     parse_client_config,
@@ -62,3 +63,31 @@ def test_parse_wg_peer_states_uses_public_key():
     assert peers["client-pub"].endpoint == "1.2.3.4:51820"
     assert peers["client-pub"].latest_handshake == 1710000000
     assert peers["client-pub"].transfer_rx == 120
+
+
+def test_device_public_ip_comes_from_endpoint_host():
+    device = Device(
+        name="client",
+        ip="10.46.0.6",
+        address="10.46.0.6/32",
+        public_key="client-pub",
+        config_path="/wireguard/clients/client.conf",
+        endpoint="8.8.8.8:51820",
+        minion_url="http://10.46.0.6:8000",
+    )
+
+    assert device.public_ip == "8.8.8.8"
+
+
+def test_device_public_ip_ignores_private_endpoint_host():
+    device = Device(
+        name="client",
+        ip="10.46.0.6",
+        address="10.46.0.6/32",
+        public_key="client-pub",
+        config_path="/wireguard/clients/client.conf",
+        endpoint="192.168.1.20:51820",
+        minion_url="http://10.46.0.6:8000",
+    )
+
+    assert device.public_ip is None

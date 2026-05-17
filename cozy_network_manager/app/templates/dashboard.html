@@ -33,19 +33,19 @@
   <div class="panel">
     <h2>WireGuard devices</h2>
     <table>
-      <thead><tr><th>Client</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
+      <thead><tr><th>Client</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
       <tbody>
       {% for device in devices[:8] %}
         <tr>
-          <td>
-            {{ device.name }}<br><span class="mono muted">{{ device.ip }}</span>
-          </td>
+          <td>{{ device.name }}</td>
+          <td class="mono">{{ device.ip }}</td>
+          <td class="mono">{{ device.public_ip or '' }}</td>
           <td><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
           <td><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
           <td><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
         </tr>
       {% else %}
-        <tr><td colspan="4">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
+        <tr><td colspan="6">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

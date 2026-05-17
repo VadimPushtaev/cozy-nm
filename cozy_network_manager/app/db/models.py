@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from ipaddress import ip_address
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
@@ -87,6 +88,17 @@ class Device(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=now_utc, onupdate=now_utc
     )
+
+    @property
+    def public_ip(self) -> str | None:
+        if not self.endpoint:
+            return None
+        host = self.endpoint.rsplit(":", 1)[0].strip("[]")
+        try:
+            parsed = ip_address(host)
+        except ValueError:
+            return None
+        return str(parsed) if parsed.is_global else None
 
 
 class WarningEvent(Base):

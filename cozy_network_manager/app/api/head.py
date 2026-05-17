@@ -35,6 +35,7 @@ def _device_payload(device: Device):
         "address": device.address,
         "interface": device.interface,
         "endpoint": device.endpoint,
+        "public_ip": device.public_ip,
         "latest_handshake": device.latest_handshake,
         "transfer_rx": device.transfer_rx,
         "transfer_tx": device.transfer_tx,
