@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import socket
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -28,9 +30,50 @@ def _node_payload(node: Node):
     }
 
 
-def _device_payload(device: Device):
+def _device_client_label(device: Device, config) -> str:
+    return "__root__" if config.deployment.head and device.ip == config.deployment.head else device.name
+
+
+def _reverse_hostname(ip: str) -> str | None:
+    try:
+        name, _, _ = socket.gethostbyaddr(ip)
+    except Exception:
+        return None
+    return name.rstrip(".") or None
+
+
+def _latest_hostnames_by_ip(db: Session) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for node in db.query(Node).order_by(Node.name).all():
+        snapshot = latest_snapshot(db, node.id)
+        hostname = (snapshot.snapshot.get("host") or {}).get("hostname") if snapshot else None
+        if hostname:
+            values[node.expected_vpn_ip] = hostname
+    return values
+
+
+def _device_rows(db: Session, config) -> list[dict]:
+    hostnames_by_ip = _latest_hostnames_by_ip(db)
+    rows = []
+    for device in device_inventory(db):
+        hostname = hostnames_by_ip.get(device.ip) or _reverse_hostname(device.ip)
+        if not hostname and device.name != device.ip:
+            hostname = device.name
+        rows.append(
+            {
+                "device": device,
+                "client": _device_client_label(device, config),
+                "hostname": hostname or "",
+            }
+        )
+    return rows
+
+
+def _device_payload(device: Device, config, hostname: str = ""):
     return {
         "name": device.name,
+        "client": _device_client_label(device, config),
+        "hostname": hostname,
         "ip": device.ip,
         "address": device.address,
         "interface": device.interface,
@@ -94,10 +137,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     active_node_names = _active_node_names(config)
     visible_node_names = _visible_node_names(db, active_node_names)
     nodes = node_summary(db, config.stale_after_seconds, active_node_names)
-    devices = device_inventory(db)
-    network_rows = [
-        {"label": device.name, "online": device.wg_connected} for device in devices
-    ] or [{"label": row["node"].name, "online": row["online"]} for row in nodes]
+    device_rows = _device_rows(db, config)
+    devices = [row["device"] for row in device_rows]
     dns = db.query(DnsRecord).order_by(DnsRecord.hostname, DnsRecord.record_type).all()
     forward_rows = _socat_forward_rows(db)
     warnings = _visible_warnings(db, visible_node_names, 10)
@@ -107,7 +148,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
         {
             "nodes": nodes,
             "devices": devices,
-            "network_rows": network_rows,
+            "device_rows": device_rows,
             "device_subnets": config.device_subnets,
             "dns_records": dns,
             "forward_rows": forward_rows,
@@ -125,7 +166,7 @@ def nodes_page(request: Request, db: Session = Depends(get_db)):
         "nodes.html",
         {
             "nodes": node_summary(db, config.stale_after_seconds, active_node_names),
-            "devices": device_inventory(db),
+            "device_rows": _device_rows(db, config),
             "device_subnets": config.device_subnets,
         },
     )
@@ -198,7 +239,11 @@ def api_nodes(db: Session = Depends(get_db)):
 
 @router.get("/api/v1/devices")
 def api_devices(db: Session = Depends(get_db)):
-    return [_device_payload(device) for device in device_inventory(db)]
+    config = get_config()
+    return [
+        _device_payload(row["device"], config, row["hostname"])
+        for row in _device_rows(db, config)
+    ]
 
 
 @router.get("/api/v1/nodes/{name}")

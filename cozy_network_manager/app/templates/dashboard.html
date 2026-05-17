@@ -5,39 +5,17 @@
   <p>{{ devices|length }} clients from {{ device_subnets|join(', ') }}, {{ nodes|length }} known nodes, {{ warnings|length }} recent warnings</p>
 </section>
 
-<section class="panel">
-  <h2>Network overview</h2>
-  <div class="graph">
-    <svg viewBox="0 0 900 280" role="img" aria-label="Network overview">
-      {% set center_x = 450 %}
-      {% set center_y = 135 %}
-      {% set positions = [
-        (170, 70), (300, 215), (450, 55), (600, 215),
-        (730, 70), (170, 205), (730, 205), (300, 55)
-      ] %}
-      <circle cx="{{ center_x }}" cy="{{ center_y }}" r="38" class="node gateway"/>
-      <text x="{{ center_x }}" y="{{ center_y + 62 }}" text-anchor="middle">10.46.0.1</text>
-      <text x="{{ center_x }}" y="{{ center_y + 80 }}" text-anchor="middle" class="subtext">VPN gateway</text>
-      {% for device in devices[:8] %}
-        {% set pos = positions[loop.index0] %}
-        <line x1="{{ center_x }}" y1="{{ center_y }}" x2="{{ pos[0] }}" y2="{{ pos[1] }}" class="edge {{ 'online' if device.wg_connected else 'stale' }}"/>
-        <circle cx="{{ pos[0] }}" cy="{{ pos[1] }}" r="30" class="{{ 'node online' if device.wg_connected else 'node stale' }}"/>
-        <text x="{{ pos[0] }}" y="{{ pos[1] + 52 }}" text-anchor="middle">{{ device.name }}</text>
-        <text x="{{ pos[0] }}" y="{{ pos[1] + 70 }}" text-anchor="middle" class="subtext">{{ device.ip }}</text>
-      {% endfor %}
-    </svg>
-  </div>
-</section>
-
 <section class="grid two">
   <div class="panel">
     <h2>WireGuard devices</h2>
     <table>
-      <thead><tr><th>Client</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
+      <thead><tr><th>Client</th><th>Hostnames</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
       <tbody>
-      {% for device in devices[:8] %}
+      {% for row in device_rows[:8] %}
+        {% set device = row.device %}
         <tr>
-          <td>{{ device.name }}</td>
+          <td>{{ row.client }}</td>
+          <td>{{ row.hostname }}</td>
           <td class="mono">{{ device.ip }}</td>
           <td class="mono">{{ device.current_public_ip or '' }}</td>
           <td><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
@@ -45,7 +23,7 @@
           <td><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
         </tr>
       {% else %}
-        <tr><td colspan="6">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
+        <tr><td colspan="7">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>

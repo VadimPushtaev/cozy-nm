@@ -7,11 +7,13 @@
 <section class="panel">
   <h2>WireGuard devices</h2>
   <table>
-    <thead><tr><th>Name</th><th>Internal IP</th><th>Public IP</th><th>Last public IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Interface</th><th>Endpoint</th><th>Last check</th></tr></thead>
+    <thead><tr><th>Client</th><th>Hostnames</th><th>Internal IP</th><th>Public IP</th><th>Last public IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Interface</th><th>Endpoint</th><th>Last check</th></tr></thead>
     <tbody>
-    {% for device in devices %}
+    {% for row in device_rows %}
+      {% set device = row.device %}
       <tr>
-        <td>{{ device.name }}</td>
+        <td>{{ row.client }}</td>
+        <td>{{ row.hostname }}</td>
         <td class="mono">{{ device.ip }}</td>
         <td class="mono">{{ device.current_public_ip or '' }}</td>
         <td class="mono">{{ device.public_ip or '' }}</td>
@@ -23,7 +25,7 @@
         <td>{{ device.last_checked_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="10">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
+      <tr><td colspan="11">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
