@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from cozy_network_manager.app.db.models import Device, Node, SnapshotRecord
-from cozy_network_manager.app.services.dns import build_dns_ip_map, map_dns_answer
+from cozy_network_manager.app.services import dns as dns_service
+from cozy_network_manager.app.services.dns import build_dns_ip_map, map_dns_answer, resolve_domains
 
 
 def test_dns_mapping_matches_known_node():
@@ -59,3 +61,41 @@ def test_dns_mapping_matches_device_public_endpoint():
 
     assert mapping.matched_node == "laptop"
     assert mapping.outside_vpn is False
+
+
+def test_resolve_domains_checks_apex_wildcard_and_configured_hostnames(monkeypatch):
+    queries: list[tuple[str, str]] = []
+
+    class FakeAnswer:
+        def __init__(self, value: str):
+            self.value = value
+
+        def __str__(self) -> str:
+            return self.value
+
+    class FakeResolver:
+        def resolve(self, hostname: str, record_type: str):
+            queries.append((hostname, record_type))
+            if hostname == "pushtaev.ru":
+                return [FakeAnswer("203.0.113.10")]
+            if hostname == "fixeduuid.pushtaev.ru":
+                return [FakeAnswer("203.0.113.11")]
+            if hostname == "mtg.pushtaev.ru":
+                return [FakeAnswer("203.0.113.12")]
+            raise dns_service.dns.resolver.NXDOMAIN
+
+    monkeypatch.setattr(dns_service, "uuid4", lambda: SimpleNamespace(hex="fixeduuid"))
+    monkeypatch.setattr(dns_service.dns.resolver, "Resolver", FakeResolver)
+
+    records = resolve_domains(["pushtaev.ru"], ["mtg.pushtaev.ru"], [])
+
+    assert [(record.hostname, record.record_type, record.target) for record in records] == [
+        ("pushtaev.ru", "A", "203.0.113.10"),
+        ("*.pushtaev.ru", "A", "203.0.113.11"),
+        ("mtg.pushtaev.ru", "A", "203.0.113.12"),
+    ]
+    assert queries == [
+        ("pushtaev.ru", "A"),
+        ("fixeduuid.pushtaev.ru", "A"),
+        ("mtg.pushtaev.ru", "A"),
+    ]
