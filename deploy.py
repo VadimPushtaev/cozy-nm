@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shlex
+import socket
 import subprocess
 import sys
 import textwrap
@@ -103,6 +105,11 @@ def run(args: list[str], *, stdin: Any = None) -> None:
     subprocess.run(args, stdin=stdin, check=True, cwd=ROOT)
 
 
+def run_shell(command: str) -> None:
+    print(f"+ sh -c {shlex.quote(command)}")
+    subprocess.run(["sh", "-c", command], check=True, cwd=ROOT)
+
+
 def ssh_args(host: str, command: str) -> list[str]:
     return ["ssh", *SSH_OPTIONS, f"root@{host}", command]
 
@@ -141,7 +148,60 @@ def verify_ssh(host: str) -> None:
 def verify_ssh_hosts(hosts: list[str]) -> None:
     print("Checking SSH access before touching any host")
     for host in hosts:
+        if is_local_host(host):
+            print(f"+ local target {host}: skipping SSH check")
+            continue
         verify_ssh(host)
+
+
+def command_output(args: list[str]) -> str:
+    try:
+        result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=False)
+    except OSError:
+        return ""
+    return result.stdout if result.returncode == 0 else ""
+
+
+def local_ipv4_addresses() -> set[str]:
+    addresses = {"127.0.0.1"}
+    ip_output = command_output(["ip", "-o", "-4", "addr", "show"])
+    for line in ip_output.splitlines():
+        parts = line.split()
+        if "inet" not in parts:
+            continue
+        address = parts[parts.index("inet") + 1].split("/", 1)[0]
+        addresses.add(address)
+
+    for address in command_output(["hostname", "-I"]).split():
+        if "." in address:
+            addresses.add(address)
+
+    try:
+        candidate: str | None = None
+        for line in Path("/proc/net/fib_trie").read_text(encoding="utf-8").splitlines():
+            match = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", line)
+            if match:
+                candidate = match.group(1)
+            if "/32 host LOCAL" in line and candidate:
+                addresses.add(candidate)
+    except OSError:
+        pass
+    return addresses
+
+
+def routed_source_ip(host: str) -> str | None:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect((host, 9))
+            return str(sock.getsockname()[0])
+    except OSError:
+        return None
+
+
+def is_local_host(host: str) -> bool:
+    if host in local_ipv4_addresses():
+        return True
+    return routed_source_ip(host) == host
 
 
 def remote_compose_helpers() -> str:
@@ -240,18 +300,18 @@ def copy_tree(host: str, remote_dir: str) -> None:
         raise subprocess.CalledProcessError(tar_return_code, tar_args)
 
 
-def deploy_host(
+def compose_command(
     host: str,
     head: str,
-    remote_dir: str,
+    work_dir: str,
     head_port: int,
     minion_port: int,
     postgres_port: int,
     startup_timeout: int,
-) -> None:
-    quoted_dir = shlex.quote(remote_dir)
+) -> str:
+    quoted_dir = shlex.quote(work_dir)
     if host == head:
-        command = textwrap.dedent(
+        return textwrap.dedent(
             f"""
             set -eu
             cd {quoted_dir}
@@ -271,30 +331,65 @@ def deploy_host(
             docker compose up -d --build head
             """
         ).strip()
-    else:
-        command = textwrap.dedent(
-            f"""
-            set -eu
-            cd {quoted_dir}
-            export COMPOSE_PROJECT_NAME={shlex.quote(PROJECT_NAME)}
-            export CNM_CONFIG_FILE=./config.yml
-            export CNM_NODE_IP={shlex.quote(host)}
-            export CNM_MINION_PORT={minion_port}
-            docker compose -f docker-compose.minion.yml down --remove-orphans --timeout 15 || true
-            ensure_port_free() {{
-              port="$1"
-              lines="$(ss -H -ltnp 2>/dev/null | awk -v port="$port" '$4 ~ "[:.]" port "$" {{ print }}' || true)"
-              if [ -n "$lines" ]; then
-                echo "Port $port for minion is already in use on $(hostname)." >&2
-                echo "$lines" >&2
-                exit 20
-              fi
-            }}
-            ensure_port_free "$CNM_MINION_PORT"
-            docker compose -f docker-compose.minion.yml up -d --build
-            """
-        ).strip()
-    ssh(host, command)
+
+    return textwrap.dedent(
+        f"""
+        set -eu
+        cd {quoted_dir}
+        export COMPOSE_PROJECT_NAME={shlex.quote(PROJECT_NAME)}
+        export CNM_CONFIG_FILE=./config.yml
+        export CNM_NODE_IP={shlex.quote(host)}
+        export CNM_MINION_PORT={minion_port}
+        {remote_compose_helpers()}
+        docker compose -f docker-compose.minion.yml down --remove-orphans --timeout 15 || true
+        ensure_port_free "$CNM_MINION_PORT" minion
+        docker compose -f docker-compose.minion.yml up -d --build
+        """
+    ).strip()
+
+
+def deploy_host(
+    host: str,
+    head: str,
+    remote_dir: str,
+    head_port: int,
+    minion_port: int,
+    postgres_port: int,
+    startup_timeout: int,
+) -> None:
+    ssh(
+        host,
+        compose_command(
+            host,
+            head,
+            remote_dir,
+            head_port,
+            minion_port,
+            postgres_port,
+            startup_timeout,
+        ),
+    )
+
+
+def deploy_local_host(
+    host: str,
+    head: str,
+    head_port: int,
+    minion_port: int,
+    postgres_port: int,
+    startup_timeout: int,
+) -> None:
+    run_shell(
+        compose_command(
+            host,
+            head,
+            str(ROOT),
+            head_port,
+            minion_port,
+            postgres_port,
+            startup_timeout,
+        )
+    )
 
 
 def main() -> None:
@@ -318,6 +413,10 @@ def main() -> None:
     verify_ssh_hosts(targets)
     print(f"Deploying head {head} and minions {', '.join(targets)}")
     for host in targets:
+        if is_local_host(host):
+            print(f"Deploying {host} locally from {ROOT}")
+            deploy_local_host(host, head, head_port, minion_port, postgres_port, startup_timeout)
+            continue
         remote_cleanup(host, remote_dir)
         copy_tree(host, remote_dir)
         deploy_host(host, head, remote_dir, head_port, minion_port, postgres_port, startup_timeout)
