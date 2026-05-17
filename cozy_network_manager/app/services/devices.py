@@ -87,6 +87,11 @@ def _client_ip(address: str, networks) -> str | None:
     return None
 
 
+def _ip_in_subnets(ip: str, subnets: list[str]) -> bool:
+    address = ip_address(ip)
+    return any(address in network for network in _subnets(subnets))
+
+
 def parse_client_config(config_path: Path, subnets: list[str]) -> ClientConfig | None:
     networks = _subnets(subnets)
     text = config_path.read_text(encoding="utf-8")
@@ -210,6 +215,7 @@ def scan_wireguard_clients(config: AppConfig) -> list[DeviceStatus]:
     peers = load_wg_peer_states()
     now = datetime.now(timezone.utc)
     statuses = []
+    client_ips = {client.ip for client in clients}
 
     for client in clients:
         peer = peers.get(client.public_key)
@@ -228,6 +234,33 @@ def scan_wireguard_clients(config: AppConfig) -> list[DeviceStatus]:
                 transfer_tx=peer.transfer_tx if peer else None,
                 wg_connected=_is_connected(peer, config.stale_after_seconds, now),
                 pingable=ping_ip(client.ip),
+                minion_available=minion_available(minion_url),
+                minion_url=minion_url,
+                last_checked_at=now,
+            )
+        )
+
+    for node in config.topology_nodes():
+        if node.expected_vpn_ip in client_ips or not _ip_in_subnets(
+            node.expected_vpn_ip,
+            config.device_subnets,
+        ):
+            continue
+        minion_url = f"http://{node.expected_vpn_ip}:{config.minion_port}"
+        statuses.append(
+            DeviceStatus(
+                name=node.name,
+                ip=node.expected_vpn_ip,
+                address=f"{node.expected_vpn_ip}/32",
+                public_key="",
+                config_path="deployment",
+                interface="local" if node.expected_vpn_ip == config.deployment.head else None,
+                endpoint=None,
+                latest_handshake=None,
+                transfer_rx=None,
+                transfer_tx=None,
+                wg_connected=node.expected_vpn_ip == config.deployment.head,
+                pingable=ping_ip(node.expected_vpn_ip),
                 minion_available=minion_available(minion_url),
                 minion_url=minion_url,
                 last_checked_at=now,

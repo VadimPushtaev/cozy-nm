@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from cozy_network_manager.app.db.models import Device
+from cozy_network_manager.app.config import AppConfig, DeploymentConfig
 from cozy_network_manager.app.services.devices import (
     load_client_configs,
     parse_client_config,
     parse_wg_peer_states,
+    scan_wireguard_clients,
 )
 
 
@@ -94,3 +96,50 @@ def test_device_public_ip_ignores_private_endpoint_host():
     )
 
     assert device.public_ip is None
+
+
+def test_scan_wireguard_clients_includes_deployment_head(monkeypatch):
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.load_client_configs", lambda *_: [])
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.load_wg_peer_states", lambda: {})
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.ping_ip", lambda ip: ip == "10.46.0.1")
+    monkeypatch.setattr(
+        "cozy_network_manager.app.services.devices.minion_available",
+        lambda url: url == "http://10.46.0.1:18081",
+    )
+
+    statuses = scan_wireguard_clients(
+        AppConfig(
+            device_subnets=["10.46.0.0/24"],
+            minion_port=18081,
+            deployment=DeploymentConfig(head="10.46.0.1", minions=["10.46.0.1"]),
+        )
+    )
+
+    assert len(statuses) == 1
+    assert statuses[0].name == "10.46.0.1"
+    assert statuses[0].ip == "10.46.0.1"
+    assert statuses[0].wg_connected is True
+    assert statuses[0].pingable is True
+    assert statuses[0].minion_available is True
+
+
+def test_scan_wireguard_clients_does_not_duplicate_configured_clients(monkeypatch, tmp_path):
+    _write_client(tmp_path, "ubuntu", "10.46.0.5/32", "client-pub")
+    client = load_client_configs(str(tmp_path), ["10.46.0.0/24"])[0]
+
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.load_client_configs", lambda *_: [client])
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.load_wg_peer_states", lambda: {})
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.ping_ip", lambda ip: False)
+    monkeypatch.setattr("cozy_network_manager.app.services.devices.minion_available", lambda url: False)
+
+    statuses = scan_wireguard_clients(
+        AppConfig(
+            device_subnets=["10.46.0.0/24"],
+            deployment=DeploymentConfig(head="10.46.0.1", minions=["10.46.0.1", "10.46.0.5"]),
+        )
+    )
+
+    assert [(status.name, status.ip) for status in statuses] == [
+        ("ubuntu", "10.46.0.5"),
+        ("10.46.0.1", "10.46.0.1"),
+    ]

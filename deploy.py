@@ -326,9 +326,10 @@ def compose_command(
             docker compose down --remove-orphans --timeout 15 || true
             ensure_port_free "$CNM_POSTGRES_PORT" postgres
             ensure_port_free "$CNM_LISTEN_PORT" head
+            ensure_port_free "$CNM_MINION_PORT" minion
             docker compose up -d --build postgres
             wait_healthy postgres
-            docker compose up -d --build head
+            docker compose up -d --build head minion
             """
         ).strip()
 
