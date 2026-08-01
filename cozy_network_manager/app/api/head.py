@@ -31,7 +31,7 @@ def _node_payload(node: Node):
 
 
 def _device_client_label(device: Device, config) -> str:
-    return "__root__" if config.deployment.head and device.ip == config.deployment.head else device.name
+    return "head" if config.deployment.head and device.ip == config.deployment.head else device.name
 
 
 def _reverse_hostname(ip: str) -> str | None:

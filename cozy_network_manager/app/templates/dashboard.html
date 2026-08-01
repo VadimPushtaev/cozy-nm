@@ -5,22 +5,22 @@
   <p>{{ devices|length }} clients from {{ device_subnets|join(', ') }}, {{ nodes|length }} known nodes, {{ warnings|length }} recent warnings</p>
 </section>
 
-<section class="grid two">
-  <div class="panel">
-    <h2>WireGuard devices</h2>
-    <table>
-      <thead><tr><th>Client</th><th>Hostnames</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
+<section class="panel">
+  <h2>WireGuard devices</h2>
+  <div class="table-scroll">
+    <table class="device-table">
+      <thead><tr><th>Client</th><th>Hostname</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
       <tbody>
       {% for row in device_rows[:8] %}
         {% set device = row.device %}
         <tr>
-          <td>{{ row.client }}</td>
-          <td>{{ row.hostname }}</td>
-          <td class="mono">{{ device.ip }}</td>
-          <td class="mono">{{ device.current_public_ip or '' }}</td>
-          <td><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
-          <td><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
-          <td><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
+          <td class="client-cell">{{ row.client }}</td>
+          <td class="hostname-cell">{{ row.hostname }}</td>
+          <td class="mono nowrap">{{ device.ip }}</td>
+          <td class="mono nowrap">{{ device.current_public_ip or '' }}</td>
+          <td class="nowrap"><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
+          <td class="nowrap"><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
+          <td class="nowrap"><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
         </tr>
       {% else %}
         <tr><td colspan="7">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
@@ -28,9 +28,11 @@
       </tbody>
     </table>
   </div>
+</section>
 
-  <div class="panel">
-    <h2>DNS mappings</h2>
+<section class="panel">
+  <h2>DNS mappings</h2>
+  <div class="table-scroll">
     <table>
       <thead><tr><th>Host</th><th>Type</th><th>Target</th><th>Node</th></tr></thead>
       <tbody>
