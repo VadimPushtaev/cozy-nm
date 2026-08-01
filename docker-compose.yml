@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: cozy_network_manager
       POSTGRES_USER: cozy
@@ -17,6 +18,7 @@ services:
 
   head:
     build: .
+    restart: unless-stopped
     network_mode: host
     cap_add:
       - NET_ADMIN
@@ -27,6 +29,7 @@ services:
       CNM_CONFIG: /config/config.yml
       CNM_MODE: head
       CNM_NODE_IP: ${CNM_NODE_IP:-}
+      CNM_LISTEN_HOST: ${CNM_NODE_IP:-127.0.0.1}
       CNM_LISTEN_PORT: ${CNM_LISTEN_PORT:-8000}
       CNM_DATABASE_URL: postgresql+psycopg://cozy:cozy@127.0.0.1:${CNM_POSTGRES_PORT:-5432}/cozy_network_manager
       CNM_HOST_ROOT: /host
@@ -41,10 +44,11 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    command: ["sh", "-c", "alembic upgrade head && uvicorn cozy_network_manager.app.main:app --host 0.0.0.0 --port ${CNM_LISTEN_PORT:-8000}"]
+    command: ["sh", "-c", "alembic upgrade head && uvicorn cozy_network_manager.app.main:app --host ${CNM_NODE_IP:-127.0.0.1} --port ${CNM_LISTEN_PORT:-8000}"]
 
   minion:
     build: .
+    restart: unless-stopped
     environment:
       CNM_CONFIG: /config/config.yml
       CNM_MODE: minion
@@ -52,7 +56,7 @@ services:
       CNM_LISTEN_PORT: ${CNM_MINION_PORT:-8000}
       CNM_HOST_ROOT: /host
     ports:
-      - "${CNM_MINION_PORT:-8000}:${CNM_MINION_PORT:-8000}"
+      - "${CNM_NODE_IP:-127.0.0.1}:${CNM_MINION_PORT:-8000}:${CNM_MINION_PORT:-8000}"
     volumes:
       - ${CNM_CONFIG_FILE:-./config.example.yml}:/config/config.yml:ro
       - /etc/hostname:/host/etc/hostname:ro
