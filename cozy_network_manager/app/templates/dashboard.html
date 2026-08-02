@@ -51,29 +51,32 @@
 
 <section class="panel">
   <h2>Socat bridges</h2>
-  <table>
-    <thead><tr><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
-    <tbody>
-    {% for row in forward_rows[:8] %}
-      {% set f = row.forward %}
-      <tr>
-        <td>{{ f.container_name }}</td>
-        <td>{{ f.source_port or 'unknown' }}</td>
-        <td>
-          {% if row.destination_device %}
-            {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
-          {% else %}
-            {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
-          {% endif %}
-        </td>
-        <td><span class="badge {{ 'ok' if f.status == 'running' else 'warn' }}">{{ f.status }}</span></td>
-        <td>{{ f.image }}</td>
-      </tr>
-    {% else %}
-      <tr><td colspan="5">No socat bridge containers found yet.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Node</th><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
+      <tbody>
+      {% for row in forward_rows[:8] %}
+        {% set f = row.forward %}
+        <tr>
+          <td class="nowrap"><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
+          <td>{{ f.container_name }}</td>
+          <td>{{ f.source_port or 'unknown' }}</td>
+          <td>
+            {% if row.destination_device %}
+              {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
+            {% else %}
+              {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
+            {% endif %}
+          </td>
+          <td><span class="badge {{ 'ok' if f.status == 'running' else 'warn' }}">{{ f.status }}</span></td>
+          <td>{{ f.image }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No socat bridge containers found yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="panel">
