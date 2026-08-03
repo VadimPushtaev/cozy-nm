@@ -100,9 +100,17 @@ class AppConfig(BaseModel):
     dns: DnsConfig = Field(default_factory=DnsConfig)
     bridges: BridgeManagementConfig = Field(default_factory=BridgeManagementConfig)
     bridge_api_token: str = ""
+    head_auth_file: str = ".cozy-nm/head-auth.json"
+    head_auth_session_days: int = 30
+    head_auth_cookie_secure: bool = False
     host_root: str = "/host"
 
-    @field_validator("polling_interval_seconds", "device_scan_interval_seconds", "stale_after_seconds")
+    @field_validator(
+        "polling_interval_seconds",
+        "device_scan_interval_seconds",
+        "stale_after_seconds",
+        "head_auth_session_days",
+    )
     @classmethod
     def positive_int(cls, value: int) -> int:
         if value <= 0:
@@ -187,6 +195,18 @@ def _env_int(name: str, current: int) -> int:
     return int(raw)
 
 
+def _env_bool(name: str, current: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return current
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be a boolean value")
+
+
 def load_config(path: str | Path | None = None) -> AppConfig:
     config_path = Path(path or os.getenv("CNM_CONFIG", "config.example.yml"))
     data = _read_yaml(config_path)
@@ -213,6 +233,13 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         "minion_port": _env_int("CNM_MINION_PORT", config.minion_port),
         "public_ipv4_url": os.getenv("CNM_PUBLIC_IPV4_URL", config.public_ipv4_url),
         "bridge_api_token": os.getenv("CNM_BRIDGE_API_TOKEN", config.bridge_api_token),
+        "head_auth_file": os.getenv("CNM_HEAD_AUTH_FILE", config.head_auth_file),
+        "head_auth_session_days": _env_int(
+            "CNM_HEAD_AUTH_SESSION_DAYS", config.head_auth_session_days
+        ),
+        "head_auth_cookie_secure": _env_bool(
+            "CNM_HEAD_AUTH_COOKIE_SECURE", config.head_auth_cookie_secure
+        ),
     }
     return config.model_copy(update=overrides)
 

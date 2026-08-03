@@ -37,6 +37,9 @@ bridges:
     )
     monkeypatch.setenv("CNM_MODE", "minion")
     monkeypatch.setenv("CNM_LISTEN_PORT", "8081")
+    monkeypatch.setenv("CNM_HEAD_AUTH_FILE", "/tmp/cozy-auth.json")
+    monkeypatch.setenv("CNM_HEAD_AUTH_SESSION_DAYS", "45")
+    monkeypatch.setenv("CNM_HEAD_AUTH_COOKIE_SECURE", "yes")
 
     config = load_config(config_path)
 
@@ -59,6 +62,9 @@ bridges:
     assert config.dns_domains() == ["example.com"]
     assert config.dns_hostnames() == ["vpn.example.com"]
     assert config.bridge_host("10.0.0.1").compose_dir == "/root/socat-docker"
+    assert config.head_auth_file == "/tmp/cozy-auth.json"
+    assert config.head_auth_session_days == 45
+    assert config.head_auth_cookie_secure is True
 
 
 def test_bridge_hosts_require_unique_ips_and_absolute_paths(tmp_path: Path):

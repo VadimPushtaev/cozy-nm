@@ -2,7 +2,7 @@
 
 Cozy Network Manager is a self-hosted FastAPI tool for inspecting a private WireGuard VPN network. It runs as either a `head` dashboard or a minion collector. Explicitly whitelisted minions can also manage a Socat Docker Compose project for their host.
 
-It is intentionally unauthenticated. Bind it only to trusted private VPN interfaces or localhost.
+The head starts without a password and offers single-password browser authentication. Bind the head and minions only to trusted private VPN interfaces or localhost.
 
 ## Features
 
@@ -98,6 +98,9 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 - `CNM_MINION_PORT=8000`
 - `CNM_PUBLIC_IPV4_URL=https://ifconfig.me/ip`
 - `CNM_BRIDGE_API_TOKEN=shared-secret`
+- `CNM_HEAD_AUTH_FILE=/var/lib/cozy-nm/auth/head-auth.json`
+- `CNM_HEAD_AUTH_SESSION_DAYS=30`
+- `CNM_HEAD_AUTH_COOKIE_SECURE=false`
 
 `wireguard_clients_path` points at the host directory containing client `.conf` and matching `.pub` files. The background scanner reads those configs every 10 seconds, matches each client public key against `wg show all dump`, pings the client IP, and checks `http://<client-ip>:<minion_port>/health` for the minion. `device_subnets` controls which client addresses are included. The example config defaults to `10.46.0.0/24`.
 
@@ -106,6 +109,18 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 `dns.domains` lists domains to inspect, for example `pushtaev.ru`. For each domain the collector checks only `A` records for the root domain and for a random UUID subdomain, displayed as `*.domain` when it resolves. Use `dns.hostnames` for known names such as `mtg.pushtaev.ru`. DNS `A` records are matched against VPN IPs, WireGuard client endpoints, and the public IPv4 values reported by minions.
 
 Minions report public IPv4 by calling `CNM_PUBLIC_IPV4_URL`, which defaults to `https://ifconfig.me/ip`.
+
+### Head password
+
+When no authentication file exists, the head is open and the navigation offers **Set password**. The password is stored as a salted scrypt hash; browser sessions last 30 days by default and are stored as token hashes. There is one shared password, with controls to change it or remove it under **Password**. Both operations require the current password.
+
+Docker Compose persists the state at `/root/.config/cozy-nm/head-auth.json` on the head host. Anyone with SSH access can immediately restore passwordless access without restarting the service:
+
+```bash
+rm -f /root/.config/cozy-nm/head-auth.json
+```
+
+If the head is served through HTTPS, set `CNM_HEAD_AUTH_COOKIE_SECURE=true`. Authentication protects the head UI and API, except `GET /health`; minion bridge APIs continue to use their bearer token.
 
 ### Socat bridge management
 

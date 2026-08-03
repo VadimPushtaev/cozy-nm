@@ -14,6 +14,14 @@
         <a href="/dns">DNS</a>
         <a href="/forwards">Port forwards</a>
         <a href="/warnings">Warnings</a>
+        {% if request.state.auth_configured and request.state.authenticated %}
+          <a href="/auth/settings">Password</a>
+          <form class="inline-form nav-form" method="post" action="/auth/logout">
+            <button type="submit">Sign out</button>
+          </form>
+        {% elif not request.state.auth_configured %}
+          <a href="/auth/setup">Set password</a>
+        {% endif %}
       </nav>
     </header>
     <main class="page">
