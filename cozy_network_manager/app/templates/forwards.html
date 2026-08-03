@@ -2,30 +2,96 @@
 {% block content %}
 <section class="page-head">
   <h1>Port forwards</h1>
-  <p>Socat bridge containers discovered from the host Docker socket.</p>
+  <p>Configured Socat bridges managed through whitelisted minions.</p>
 </section>
-<section class="panel">
-  <table>
-    <thead><tr><th>Node</th><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
-    <tbody>
-    {% for row in rows %}
-      {% set f = row.forward %}
-      <tr>
-        <td><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
-        <td>{{ f.container_name }}</td>
-        <td>{{ f.source_port or 'unknown' }}</td>
-        <td>
-          {% if row.destination_device %}
-            {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
+
+{% if message %}<p class="notice success">{{ message }}</p>{% endif %}
+{% if error %}<p class="notice error">{{ error }}</p>{% endif %}
+
+{% for project in projects %}
+  <section class="panel">
+    <div class="panel-head">
+      <div>
+        <h2><a href="/nodes/{{ project.node_ip }}">{{ project.node_ip }}</a>{% if project.hostname %} · {{ project.hostname }}{% endif %}</h2>
+        <p class="mono muted">{{ project.compose_dir }}/{{ project.compose_file }}</p>
+      </div>
+      <div class="actions">
+        {% if project.available %}
+          <a class="button secondary" href="/forwards/{{ project.node_ip }}/bridges/new">Add bridge</a>
+          <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/project/apply" onsubmit="return confirm('Apply the saved Compose configuration on {{ project.node_ip }}?')">
+            <button type="submit">Apply project</button>
+          </form>
+          <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/project/restart" onsubmit="return confirm('Restart every running bridge on {{ project.node_ip }} without applying saved changes?')">
+            <button class="secondary" type="submit">Restart project</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not project.available %}
+      <p class="notice error">{{ project.errors|join('; ') }}</p>
+    {% else %}
+      <p>
+        <span class="badge {{ 'ok' if project.compose_valid else 'warn' }}">{{ 'valid compose' if project.compose_valid else 'invalid compose' }}</span>
+        {% if project.pending_apply %}<span class="badge warn">pending apply</span>{% else %}<span class="badge ok">applied</span>{% endif %}
+      </p>
+      {% for project_error in project.errors %}<p class="notice error">{{ project_error }}</p>{% endfor %}
+
+      <div class="table-scroll">
+        <table class="bridge-table">
+          <thead><tr><th>Bridge</th><th>Listen</th><th>Destination</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for bridge in project.services %}
+            <tr>
+              <td>
+                <strong>{{ bridge.name }}</strong>
+                {% if not bridge.managed %}<br><span class="badge warn">read-only</span>{% endif %}
+              </td>
+              <td class="mono nowrap">{{ bridge.listen_port or 'unknown' }}</td>
+              <td>
+                {% if bridge.destination_device %}{{ bridge.destination_device }}<br>{% endif %}
+                <span class="mono{% if bridge.destination_device %} muted{% endif %}">{{ bridge.target_host or 'unknown' }}{% if bridge.target_port %}:{{ bridge.target_port }}{% endif %}</span>
+              </td>
+              <td>
+                <span class="badge {{ 'ok' if bridge.runtime_state == 'running' else 'warn' }}">{{ bridge.runtime_state or 'not created' }}</span>
+                {% if bridge.validation_error %}<br><span class="muted">{{ bridge.validation_error }}</span>{% endif %}
+              </td>
+              <td>
+                <div class="actions compact">
+                  {% if bridge.managed %}
+                    <a class="button secondary" href="/forwards/{{ project.node_ip }}/bridges/{{ bridge.name }}/edit">Edit</a>
+                    {% if bridge.runtime_state %}
+                      {% if bridge.runtime_state == 'running' %}
+                        <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/bridges/{{ bridge.name }}/actions/stop"><button class="secondary" type="submit">Stop</button></form>
+                        <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/bridges/{{ bridge.name }}/actions/restart"><button class="secondary" type="submit">Restart</button></form>
+                      {% else %}
+                        <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/bridges/{{ bridge.name }}/actions/start"><button class="secondary" type="submit">Start</button></form>
+                      {% endif %}
+                    {% else %}
+                      <span class="muted">Apply first</span>
+                    {% endif %}
+                    <form class="inline-form" method="post" action="/forwards/{{ project.node_ip }}/bridges/{{ bridge.name }}/delete" onsubmit="return confirm('Remove {{ bridge.name }} from the saved configuration? The container remains until Apply project.')"><button class="danger" type="submit">Delete</button></form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
           {% else %}
-            {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
-          {% endif %}
-        </td>
-        <td>{{ f.status }}</td>
-        <td>{{ f.image }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+            <tr><td colspan="5">No bridges are configured on this host.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if project.orphans %}
+        <h3>Pending removal</h3>
+        <p class="muted">These Compose containers are no longer configured and will be removed by Apply project.</p>
+        <ul>
+          {% for orphan in project.orphans %}<li><span class="mono">{{ orphan.name }}</span> — {{ orphan.state or 'unknown' }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    {% endif %}
+  </section>
+{% else %}
+  <section class="panel"><p>No bridge hosts are configured.</p></section>
+{% endfor %}
 {% endblock %}

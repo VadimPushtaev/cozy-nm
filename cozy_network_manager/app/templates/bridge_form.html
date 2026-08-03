@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1>{{ 'Edit bridge' if bridge else 'Add bridge' }}</h1>
+  <p>Host {{ node_ip }} · <span class="mono">{{ compose_dir }}</span></p>
+</section>
+
+<section class="panel form-panel">
+  <form method="post" action="{% if bridge %}/forwards/{{ node_ip }}/bridges/{{ bridge.name }}/edit{% else %}/forwards/{{ node_ip }}/bridges{% endif %}">
+    <label for="name">Service name</label>
+    <input id="name" name="name" value="{{ bridge.name if bridge else '' }}" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,119}" required>
+
+    <label for="listen_port">Public listen port</label>
+    <input id="listen_port" name="listen_port" type="number" min="1" max="65535" value="{{ bridge.listen_port if bridge else '' }}" required>
+
+    <label for="target_host">Target host</label>
+    <input id="target_host" name="target_host" value="{{ bridge.target_host if bridge else '' }}" placeholder="10.46.0.6" required>
+
+    <label for="target_port">Target port</label>
+    <input id="target_port" name="target_port" type="number" min="1" max="65535" value="{{ bridge.target_port if bridge else '' }}" required>
+
+    <p class="muted">Saving validates and updates Compose but does not change containers until Apply project is used.</p>
+    <div class="actions">
+      <button type="submit">Save bridge</button>
+      <a class="button secondary" href="/forwards">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

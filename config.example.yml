@@ -23,3 +23,6 @@ deployment:
 dns:
   domains: []
   hostnames: []
+
+bridges:
+  hosts: []

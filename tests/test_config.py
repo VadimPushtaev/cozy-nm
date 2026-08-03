@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from cozy_network_manager.app.config import load_config
 
 
@@ -25,6 +28,10 @@ device_subnets:
 dns:
   domains: [example.com]
   hostnames: [vpn.example.com]
+bridges:
+  hosts:
+    - node_ip: 10.0.0.1
+      compose_dir: /root/socat-docker
 """,
         encoding="utf-8",
     )
@@ -51,3 +58,34 @@ dns:
     assert config.dns.hostnames == ["vpn.example.com"]
     assert config.dns_domains() == ["example.com"]
     assert config.dns_hostnames() == ["vpn.example.com"]
+    assert config.bridge_host("10.0.0.1").compose_dir == "/root/socat-docker"
+
+
+def test_bridge_hosts_require_unique_ips_and_absolute_paths(tmp_path: Path):
+    duplicate_path = tmp_path / "duplicate.yml"
+    duplicate_path.write_text(
+        """
+bridges:
+  hosts:
+    - node_ip: 10.46.0.1
+      compose_dir: /root/one
+    - node_ip: 10.46.0.1
+      compose_dir: /root/two
+""",
+        encoding="utf-8",
+    )
+    relative_path = tmp_path / "relative.yml"
+    relative_path.write_text(
+        """
+bridges:
+  hosts:
+    - node_ip: 10.46.0.1
+      compose_dir: relative/path
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValidationError, match="must be unique"):
+        load_config(duplicate_path)
+    with pytest.raises(ValidationError, match="absolute path"):
+        load_config(relative_path)

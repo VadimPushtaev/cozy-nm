@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -10,6 +11,15 @@ from cozy_network_manager.app.config import get_config
 from cozy_network_manager.app.db.models import Device, DnsRecord, Node, SnapshotRecord, WarningEvent
 from cozy_network_manager.app.db.session import get_db
 from cozy_network_manager.app.services.devices import device_inventory
+from cozy_network_manager.app.services.bridge_client import (
+    BridgeClientError,
+    bridge_action as call_bridge_action,
+    create_bridge as call_create_bridge,
+    delete_bridge as call_delete_bridge,
+    fetch_bridge_projects,
+    project_action as call_project_action,
+    update_bridge as call_update_bridge,
+)
 from cozy_network_manager.app.services.nodes import latest_snapshot, node_summary
 from cozy_network_manager.app.ui.templates import templates
 
@@ -112,23 +122,46 @@ def _visible_warnings(db: Session, visible_node_names: set[str], limit: int) -> 
     ][:limit]
 
 
-def _socat_forward_rows(db: Session):
-    devices_by_ip = {device.ip: device for device in device_inventory(db)}
-    rows = []
-    for node in db.query(Node).order_by(Node.name).all():
-        snapshot = latest_snapshot(db, node.id)
-        if not snapshot:
-            continue
-        for forward in snapshot.snapshot.get("socat_forwards", []):
-            rows.append(
-                {
-                    "node": node,
-                    "forward": forward,
-                    "snapshot": snapshot,
-                    "destination_device": devices_by_ip.get(forward.get("destination_host")),
-                }
-            )
-    return rows
+def _bridge_projects(db: Session, config) -> list[dict]:
+    device_names_by_ip = {device.ip: device.name for device in device_inventory(db)}
+    hostnames_by_ip = _latest_hostnames_by_ip(db)
+    projects = fetch_bridge_projects(config)
+    for project in projects:
+        project["hostname"] = hostnames_by_ip.get(project["node_ip"], "")
+        for bridge in project["services"]:
+            bridge["destination_device"] = device_names_by_ip.get(bridge.get("target_host"))
+    return projects
+
+
+def _bridge_rows(projects: list[dict]) -> list[dict]:
+    return [
+        {"project": project, "bridge": bridge}
+        for project in projects
+        for bridge in project["services"]
+    ]
+
+
+def _same_origin(request: Request) -> None:
+    expected_host = request.headers.get("host", "")
+    origin = request.headers.get("origin")
+    referer = request.headers.get("referer")
+    supplied = origin or referer
+    if not supplied or urlparse(supplied).netloc != expected_host:
+        raise HTTPException(status_code=403, detail="Bridge actions require a same-origin form submission.")
+
+
+def _forwards_redirect(*, message: str | None = None, error: str | None = None):
+    query = urlencode({key: value for key, value in {"message": message, "error": error}.items() if value})
+    return RedirectResponse(f"/forwards{f'?{query}' if query else ''}", status_code=303)
+
+
+def _bridge_form_payload(name: str, listen_port: int, target_host: str, target_port: int):
+    return {
+        "name": name.strip(),
+        "listen_port": listen_port,
+        "target_host": target_host.strip(),
+        "target_port": target_port,
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -140,7 +173,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     device_rows = _device_rows(db, config)
     devices = [row["device"] for row in device_rows]
     dns = db.query(DnsRecord).order_by(DnsRecord.hostname, DnsRecord.record_type).all()
-    forward_rows = _socat_forward_rows(db)
+    bridge_projects = _bridge_projects(db, config)
     warnings = _visible_warnings(db, visible_node_names, 10)
     return templates.TemplateResponse(
         request,
@@ -151,7 +184,8 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "device_rows": device_rows,
             "device_subnets": config.device_subnets,
             "dns_records": dns,
-            "forward_rows": forward_rows,
+            "forward_rows": _bridge_rows(bridge_projects),
+            "bridge_projects": bridge_projects,
             "warnings": warnings,
         },
     )
@@ -208,8 +242,136 @@ def dns_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/forwards", response_class=HTMLResponse)
-def forwards_page(request: Request, db: Session = Depends(get_db)):
-    return templates.TemplateResponse(request, "forwards.html", {"rows": _socat_forward_rows(db)})
+def forwards_page(
+    request: Request,
+    message: str | None = None,
+    error: str | None = None,
+    db: Session = Depends(get_db),
+):
+    config = get_config()
+    return templates.TemplateResponse(
+        request,
+        "forwards.html",
+        {
+            "projects": _bridge_projects(db, config),
+            "message": message,
+            "error": error,
+        },
+    )
+
+
+@router.get("/forwards/{node_ip}/bridges/new", response_class=HTMLResponse)
+def new_bridge_page(request: Request, node_ip: str):
+    config = get_config()
+    host = config.bridge_host(node_ip)
+    if host is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(
+        request,
+        "bridge_form.html",
+        {"node_ip": node_ip, "bridge": None, "compose_dir": host.compose_dir},
+    )
+
+
+@router.get("/forwards/{node_ip}/bridges/{name}/edit", response_class=HTMLResponse)
+def edit_bridge_page(request: Request, node_ip: str, name: str, db: Session = Depends(get_db)):
+    projects = _bridge_projects(db, get_config())
+    project = next((item for item in projects if item["node_ip"] == node_ip), None)
+    bridge = next(
+        (item for item in (project or {}).get("services", []) if item["name"] == name),
+        None,
+    )
+    if project is None or bridge is None:
+        raise HTTPException(status_code=404)
+    if not bridge.get("managed"):
+        raise HTTPException(status_code=409, detail="Unsupported bridge definitions are read-only.")
+    return templates.TemplateResponse(
+        request,
+        "bridge_form.html",
+        {
+            "node_ip": node_ip,
+            "bridge": bridge,
+            "compose_dir": project["compose_dir"],
+        },
+    )
+
+
+@router.post("/forwards/{node_ip}/bridges")
+def create_bridge_route(
+    request: Request,
+    node_ip: str,
+    name: str = Form(...),
+    listen_port: int = Form(...),
+    target_host: str = Form(...),
+    target_port: int = Form(...),
+):
+    _same_origin(request)
+    try:
+        call_create_bridge(
+            get_config(),
+            node_ip,
+            _bridge_form_payload(name, listen_port, target_host, target_port),
+        )
+    except BridgeClientError as exc:
+        return _forwards_redirect(error=str(exc))
+    return _forwards_redirect(message=f"Bridge {name.strip()} saved; apply the project to enact it.")
+
+
+@router.post("/forwards/{node_ip}/bridges/{current_name}/edit")
+def update_bridge_route(
+    request: Request,
+    node_ip: str,
+    current_name: str,
+    name: str = Form(...),
+    listen_port: int = Form(...),
+    target_host: str = Form(...),
+    target_port: int = Form(...),
+):
+    _same_origin(request)
+    try:
+        call_update_bridge(
+            get_config(),
+            node_ip,
+            current_name,
+            _bridge_form_payload(name, listen_port, target_host, target_port),
+        )
+    except BridgeClientError as exc:
+        return _forwards_redirect(error=str(exc))
+    return _forwards_redirect(message=f"Bridge {name.strip()} saved; apply the project to enact it.")
+
+
+@router.post("/forwards/{node_ip}/bridges/{name}/delete")
+def delete_bridge_route(request: Request, node_ip: str, name: str):
+    _same_origin(request)
+    try:
+        call_delete_bridge(get_config(), node_ip, name)
+    except BridgeClientError as exc:
+        return _forwards_redirect(error=str(exc))
+    return _forwards_redirect(message=f"Bridge {name} removed from configuration; apply the project to enact it.")
+
+
+@router.post("/forwards/{node_ip}/bridges/{name}/actions/{action}")
+def bridge_action_route(request: Request, node_ip: str, name: str, action: str):
+    _same_origin(request)
+    if action not in {"start", "stop", "restart"}:
+        raise HTTPException(status_code=404)
+    try:
+        result = call_bridge_action(get_config(), node_ip, name, action)
+    except BridgeClientError as exc:
+        return _forwards_redirect(error=str(exc))
+    return _forwards_redirect(message=result.get("message") or f"Bridge {action} completed.")
+
+
+@router.post("/forwards/{node_ip}/project/{action}")
+def bridge_project_action_route(request: Request, node_ip: str, action: str):
+    _same_origin(request)
+    if action not in {"apply", "restart"}:
+        raise HTTPException(status_code=404)
+    try:
+        result = call_project_action(get_config(), node_ip, action)
+    except BridgeClientError as exc:
+        return _forwards_redirect(error=str(exc))
+    return _forwards_redirect(message=result.get("message") or f"Project {action} completed.")
 
 
 @router.get("/warnings", response_class=HTMLResponse)

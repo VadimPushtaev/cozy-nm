@@ -1,13 +1,13 @@
 # Cozy Network Manager
 
-Cozy Network Manager is a self-hosted FastAPI tool for inspecting a private WireGuard VPN network. It runs as either a `head` dashboard or a read-only `minion` collector.
+Cozy Network Manager is a self-hosted FastAPI tool for inspecting a private WireGuard VPN network. It runs as either a `head` dashboard or a minion collector. Explicitly whitelisted minions can also manage a Socat Docker Compose project for their host.
 
 It is intentionally unauthenticated. Bind it only to trusted private VPN interfaces or localhost.
 
 ## Features
 
 - Head mode with server-rendered dashboard, host WireGuard client inventory, node inventory, DNS mappings, port forwards, and warnings.
-- Minion mode with `GET /health` and `GET /api/v1/snapshot`.
+- Minion mode with `GET /health`, `GET /api/v1/snapshot`, and authenticated bridge-management endpoints on explicitly whitelisted hosts.
 - PostgreSQL persistence for configured nodes, manual tags/notes, snapshots, DNS results, and warnings.
 - Best-effort collectors for host metadata, network interfaces, WireGuard, Docker containers, and socat forwarding containers.
 - YAML config with environment overrides.
@@ -24,7 +24,7 @@ The Docker examples bind host paths into the container so the app can inspect th
 - `/sys`
 - `/var/run/docker.sock`
 
-These mounts provide elevated visibility into the host. The Docker socket can expose broad host control to code running in the container, even though Cozy Network Manager only performs read-only inspection. Use this only on trusted machines inside your private VPN.
+These mounts provide elevated visibility into the host. The Docker socket can expose broad host control to code running in the container. Bridge-enabled minions intentionally receive write access to the socket and to their configured Compose folder. Use this only on trusted machines inside your private VPN.
 
 ## Head quick start
 
@@ -97,6 +97,7 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 - `CNM_WIREGUARD_CLIENTS_PATH=/host/wireguard/clients`
 - `CNM_MINION_PORT=8000`
 - `CNM_PUBLIC_IPV4_URL=https://ifconfig.me/ip`
+- `CNM_BRIDGE_API_TOKEN=shared-secret`
 
 `wireguard_clients_path` points at the host directory containing client `.conf` and matching `.pub` files. The background scanner reads those configs every 10 seconds, matches each client public key against `wg show all dump`, pings the client IP, and checks `http://<client-ip>:<minion_port>/health` for the minion. `device_subnets` controls which client addresses are included. The example config defaults to `10.46.0.0/24`.
 
@@ -105,6 +106,23 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 `dns.domains` lists domains to inspect, for example `pushtaev.ru`. For each domain the collector checks only `A` records for the root domain and for a random UUID subdomain, displayed as `*.domain` when it resolves. Use `dns.hostnames` for known names such as `mtg.pushtaev.ru`. DNS `A` records are matched against VPN IPs, WireGuard client endpoints, and the public IPv4 values reported by minions.
 
 Minions report public IPv4 by calling `CNM_PUBLIC_IPV4_URL`, which defaults to `https://ifconfig.me/ip`.
+
+### Socat bridge management
+
+Bridge hosts are an explicit allowlist. The head never accepts a Compose path from a browser request; it looks up the selected VPN IP in this configuration and calls that host's minion with the shared bearer token:
+
+```yaml
+bridges:
+  hosts:
+    - node_ip: 10.46.0.1
+      compose_dir: /root/socat-docker
+    - node_ip: 10.46.0.5
+      compose_dir: /root/socat-docker
+```
+
+Set the same non-empty `CNM_BRIDGE_API_TOKEN` for the head and bridge-enabled minions. A convenient deployment setup is a git-ignored `.env` beside the Compose file containing `CNM_BRIDGE_API_TOKEN=<long-random-value>`; `.env` is excluded from the Docker build context. The Compose examples mount `/root/socat-docker` and the Docker socket read-write into the minion. Keep the minion port private to WireGuard hosts.
+
+The UI edits only a constrained bridge shape: bridge name, listening port, target host, and target port. Saving updates `docker-compose.yml` atomically and keeps backups under `.cozy-nm/backups`; it does not change running containers. **Apply project** runs `docker compose up -d --build --remove-orphans` (or `down` for an empty project). **Restart project** restarts existing services without applying saved changes. Existing services that do not match the managed shape remain visible and read-only.
 
 When running in Docker, the head container must be able to read the host client directory and host WireGuard state. The compose example mounts `/root/wireguard/clients` as read-only and runs the head service with the host network namespace plus `NET_ADMIN` so `wg show all dump` can inspect the host interface. If that is not acceptable for your deployment, run the head directly on the host instead.
 

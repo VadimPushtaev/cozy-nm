@@ -51,28 +51,33 @@
 
 <section class="panel">
   <h2>Socat bridges</h2>
+  {% for project in bridge_projects %}
+    {% if not project.available %}
+      <p class="notice error"><strong>{{ project.node_ip }}</strong>: {{ project.errors|join('; ') }}</p>
+    {% endif %}
+  {% endfor %}
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Node</th><th>Container</th><th>Source</th><th>Destination</th><th>Status</th><th>Image</th></tr></thead>
+      <thead><tr><th>Node</th><th>Bridge</th><th>Source</th><th>Destination</th><th>Status</th></tr></thead>
       <tbody>
       {% for row in forward_rows[:8] %}
-        {% set f = row.forward %}
+        {% set project = row.project %}
+        {% set bridge = row.bridge %}
         <tr>
-          <td class="nowrap"><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
-          <td>{{ f.container_name }}</td>
-          <td>{{ f.source_port or 'unknown' }}</td>
+          <td class="nowrap"><a href="/nodes/{{ project.node_ip }}">{{ project.node_ip }}</a></td>
+          <td>{{ bridge.name }}</td>
+          <td>{{ bridge.listen_port or 'unknown' }}</td>
           <td>
-            {% if row.destination_device %}
-              {{ row.destination_device.name }}<br><span class="mono muted">{{ f.destination_host }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}</span>
+            {% if bridge.destination_device %}
+              {{ bridge.destination_device }}<br><span class="mono muted">{{ bridge.target_host }}{% if bridge.target_port %}:{{ bridge.target_port }}{% endif %}</span>
             {% else %}
-              {{ f.destination_host or 'unknown' }}{% if f.destination_port %}:{{ f.destination_port }}{% endif %}
+              {{ bridge.target_host or 'unknown' }}{% if bridge.target_port %}:{{ bridge.target_port }}{% endif %}
             {% endif %}
           </td>
-          <td><span class="badge {{ 'ok' if f.status == 'running' else 'warn' }}">{{ f.status }}</span></td>
-          <td>{{ f.image }}</td>
+          <td><span class="badge {{ 'ok' if bridge.runtime_state == 'running' else 'warn' }}">{{ bridge.runtime_state or 'not created' }}</span></td>
         </tr>
       {% else %}
-        <tr><td colspan="6">No socat bridge containers found yet.</td></tr>
+        <tr><td colspan="5">No configured socat bridges found.</td></tr>
       {% endfor %}
       </tbody>
     </table>

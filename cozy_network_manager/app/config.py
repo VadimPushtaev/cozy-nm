@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 Mode = Literal["head", "minion"]
@@ -23,6 +23,48 @@ class KnownNode(BaseModel):
 class DnsConfig(BaseModel):
     domains: list[str] = Field(default_factory=list)
     hostnames: list[str] = Field(default_factory=list)
+
+
+class BridgeHostConfig(BaseModel):
+    node_ip: str
+    compose_dir: str
+    compose_file: str = "docker-compose.yml"
+
+    @field_validator("node_ip")
+    @classmethod
+    def ipv4_node_ip(cls, value: str) -> str:
+        from ipaddress import IPv4Address
+
+        try:
+            return str(IPv4Address(value))
+        except ValueError as exc:
+            raise ValueError("must be an IPv4 address") from exc
+
+    @field_validator("compose_dir")
+    @classmethod
+    def absolute_compose_dir(cls, value: str) -> str:
+        path = Path(value)
+        if not path.is_absolute():
+            raise ValueError("must be an absolute path")
+        return str(path)
+
+    @field_validator("compose_file")
+    @classmethod
+    def plain_compose_filename(cls, value: str) -> str:
+        if not value or Path(value).name != value:
+            raise ValueError("must be a filename without directories")
+        return value
+
+
+class BridgeManagementConfig(BaseModel):
+    hosts: list[BridgeHostConfig] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def unique_hosts(self):
+        node_ips = [host.node_ip for host in self.hosts]
+        if len(node_ips) != len(set(node_ips)):
+            raise ValueError("bridge host node_ip values must be unique")
+        return self
 
 
 class DeploymentConfig(BaseModel):
@@ -56,6 +98,8 @@ class AppConfig(BaseModel):
     minions: list[str] = Field(default_factory=list)
     deployment: DeploymentConfig = Field(default_factory=DeploymentConfig)
     dns: DnsConfig = Field(default_factory=DnsConfig)
+    bridges: BridgeManagementConfig = Field(default_factory=BridgeManagementConfig)
+    bridge_api_token: str = ""
     host_root: str = "/host"
 
     @field_validator("polling_interval_seconds", "device_scan_interval_seconds", "stale_after_seconds")
@@ -82,6 +126,12 @@ class AppConfig(BaseModel):
                 if domain.strip().rstrip(".")
             }
         )
+
+    def bridge_host(self, node_ip: str | None = None) -> BridgeHostConfig | None:
+        selected_ip = node_ip or self.node_ip
+        if not selected_ip:
+            return None
+        return next((host for host in self.bridges.hosts if host.node_ip == selected_ip), None)
 
     def node_identifier(self) -> str:
         if self.node_ip:
@@ -162,6 +212,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         ),
         "minion_port": _env_int("CNM_MINION_PORT", config.minion_port),
         "public_ipv4_url": os.getenv("CNM_PUBLIC_IPV4_URL", config.public_ipv4_url),
+        "bridge_api_token": os.getenv("CNM_BRIDGE_API_TOKEN", config.bridge_api_token),
     }
     return config.model_copy(update=overrides)
 

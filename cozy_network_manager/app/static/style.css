@@ -101,6 +101,24 @@ a:hover {
   font-size: 18px;
 }
 
+.panel h3 {
+  margin: 18px 0 8px;
+  font-size: 16px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+
+.panel-head h2,
+.panel-head p {
+  margin: 0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -118,6 +136,10 @@ table {
 
 .device-table-detailed {
   min-width: 1280px;
+}
+
+.bridge-table {
+  min-width: 880px;
 }
 
 .client-cell,
@@ -188,6 +210,76 @@ button {
   padding: 10px 14px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.button {
+  display: inline-block;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: normal;
+  cursor: pointer;
+}
+
+.button:hover {
+  color: white;
+  text-decoration: none;
+}
+
+button.secondary,
+.button.secondary {
+  background: #e3edf7;
+  color: var(--accent);
+}
+
+button.danger,
+.button.danger {
+  background: #a73333;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions.compact {
+  min-width: 260px;
+}
+
+.actions button,
+.actions .button,
+.inline-form button {
+  margin-top: 0;
+}
+
+.inline-form {
+  display: inline;
+  margin: 0;
+}
+
+.notice {
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.notice.success {
+  background: #daf2e8;
+  color: var(--ok);
+}
+
+.notice.error {
+  background: #fff1d6;
+  color: var(--warn);
+}
+
+.form-panel {
+  max-width: 680px;
 }
 
 dl {
@@ -274,6 +366,10 @@ dd {
 
   .grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .panel-head {
+    flex-direction: column;
   }
 
   th,

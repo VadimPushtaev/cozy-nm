@@ -65,6 +65,51 @@ class SocatForward(BaseModel):
     destination_port: int | None = None
 
 
+class BridgeDefinitionInput(BaseModel):
+    name: str
+    listen_port: int
+    target_host: str
+    target_port: int
+
+
+class BridgeDefinition(BaseModel):
+    name: str
+    listen_port: int | None = None
+    target_host: str | None = None
+    target_port: int | None = None
+    managed: bool = True
+    validation_error: str | None = None
+    runtime_state: str | None = None
+    runtime_status: str | None = None
+    container_name: str | None = None
+
+
+class BridgeOrphan(BaseModel):
+    name: str
+    service: str
+    state: str | None = None
+    status: str | None = None
+
+
+class BridgeProject(BaseModel):
+    node_ip: str
+    compose_dir: str
+    compose_file: str
+    compose_valid: bool = True
+    pending_apply: bool = False
+    services: list[BridgeDefinition] = Field(default_factory=list)
+    orphans: list[BridgeOrphan] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class BridgeOperationResult(BaseModel):
+    ok: bool = True
+    message: str
+    stdout: str = ""
+    stderr: str = ""
+    project: BridgeProject | None = None
+
+
 class Snapshot(BaseModel):
     node_name: str
     timestamp: datetime = Field(default_factory=utc_now)
