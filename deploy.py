@@ -1,3 +1,5 @@
+"""Deploy one Cozy-NM topology from the local config to all configured VPN hosts."""
+
 from __future__ import annotations
 
 import argparse
@@ -128,7 +130,7 @@ def explain_ssh_failure(host: str, stderr: str) -> None:
         )
         print(f"  ssh-keygen -R {host}", file=sys.stderr)
         print(f"  ssh root@{host} true", file=sys.stderr)
-        print("Then rerun: python deploy.py", file=sys.stderr)
+        print("Then rerun: python3 deploy.py", file=sys.stderr)
     elif "Permission denied" in stderr:
         print(f"SSH auth failed. Check that root login/key auth works: ssh root@{host}", file=sys.stderr)
     elif stderr.strip():
@@ -262,6 +264,7 @@ def remote_compose_helpers() -> str:
 
 
 def remote_cleanup(host: str, remote_dir: str) -> None:
+    """Replace the remote app directory without deleting volumes or external host paths."""
     quoted_dir = shlex.quote(remote_dir)
     command = textwrap.dedent(
         f"""
@@ -394,18 +397,50 @@ def deploy_local_host(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Deploy Cozy Network Manager topology")
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--remote-dir", default=DEFAULT_REMOTE_DIR)
-    parser.add_argument("--postgres-port", type=int, default=int(os.getenv("CNM_POSTGRES_PORT", "15432")))
-    parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_SECONDS)
+    parser = argparse.ArgumentParser(
+        description="Replace and deploy Cozy Network Manager on every configured topology host.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "Remote application directories are replaced. Docker volumes and host paths "
+            "outside that directory are preserved."
+        ),
+    )
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help="topology config to validate and copy to each target",
+    )
+    parser.add_argument(
+        "--remote-dir",
+        default=DEFAULT_REMOTE_DIR,
+        help="application directory to replace on remote hosts",
+    )
+    parser.add_argument(
+        "--postgres-port",
+        type=int,
+        default=int(os.getenv("CNM_POSTGRES_PORT", "15432")),
+        help="loopback PostgreSQL port on the head host",
+    )
+    parser.add_argument(
+        "--startup-timeout",
+        type=int,
+        default=DEFAULT_STARTUP_TIMEOUT_SECONDS,
+        help="seconds to wait for PostgreSQL to become healthy",
+    )
     args = parser.parse_args()
 
     remote_dir = checked_remote_dir(args.remote_dir)
     config = load_config(args.config)
     head, targets = deployment_targets(config)
-    head_port = checked_port(config.get("listen_port") or os.getenv("CNM_LISTEN_PORT", "8000"), "listen_port")
-    minion_port = checked_port(config.get("minion_port") or os.getenv("CNM_MINION_PORT", "8000"), "minion_port")
+    head_port = checked_port(
+        config.get("listen_port") or os.getenv("CNM_LISTEN_PORT", "8000"),
+        "listen_port",
+    )
+    minion_port = checked_port(
+        config.get("minion_port") or os.getenv("CNM_MINION_PORT", "8001"),
+        "minion_port",
+    )
     postgres_port = checked_port(args.postgres_port, "postgres_port")
     startup_timeout = int(args.startup_timeout)
     if startup_timeout < 10:

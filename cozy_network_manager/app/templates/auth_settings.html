@@ -22,7 +22,7 @@
     </section>
     <section class="panel danger-panel">
       <h2>Remove password</h2>
-      <p class="muted">This immediately opens the dashboard to anyone who can reach it.</p>
+      <p class="muted">This immediately opens the head UI and API to anyone who can reach them.</p>
       {% if disable_error %}<p class="notice error">{{ disable_error }}</p>{% endif %}
       <form method="post" action="/auth/disable">
         <label for="disable-current-password">Current password</label>

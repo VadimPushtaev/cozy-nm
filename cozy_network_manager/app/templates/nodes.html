@@ -2,13 +2,13 @@
 {% block content %}
 <section class="page-head">
   <h1>Devices</h1>
-  <p>WireGuard clients loaded from host configs and checked in the background.</p>
+  <p>WireGuard client configs and configured topology nodes checked in the background.</p>
 </section>
 <section class="panel">
   <h2>WireGuard devices</h2>
   <div class="table-scroll">
   <table class="device-table device-table-detailed">
-    <thead><tr><th>Client</th><th>Hostname</th><th>Internal IP</th><th>Public IP</th><th>Last public IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Interface</th><th>Endpoint</th><th>Last check</th></tr></thead>
+    <thead><tr><th>Client</th><th>Hostname</th><th>Internal IP</th><th>Current public IP</th><th>Endpoint public IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Interface</th><th>Endpoint</th><th>Last check</th></tr></thead>
     <tbody>
     {% for row in device_rows %}
       {% set device = row.device %}
@@ -26,7 +26,7 @@
         <td class="nowrap">{{ device.last_checked_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="11">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
+      <tr><td colspan="11">No client-config or topology devices found in {{ device_subnets|join(', ') }} yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>

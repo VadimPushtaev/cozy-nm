@@ -5,7 +5,18 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from cozy_network_manager.app.config import load_config
+from cozy_network_manager.app.config import AppConfig, load_config
+
+
+def test_default_head_and_minion_ports_do_not_collide():
+    config = AppConfig()
+
+    assert config.listen_port == 8000
+    assert config.minion_port == 8001
+
+    example = load_config(Path(__file__).parent.parent / "config.example.yml")
+    assert example.listen_port == 8000
+    assert example.minion_port == 8001
 
 
 def test_load_config_and_env_override(tmp_path: Path, monkeypatch):
@@ -54,8 +65,8 @@ bridges:
         ("10.0.0.2", "10.0.0.2"),
     ]
     assert config.minion_targets() == [
-        ("10.0.0.1", "http://10.0.0.1:8000"),
-        ("10.0.0.2", "http://10.0.0.2:8000"),
+        ("10.0.0.1", "http://10.0.0.1:8001"),
+        ("10.0.0.2", "http://10.0.0.2:8001"),
     ]
     assert config.device_subnets == ["10.46.0.0/24"]
     assert config.dns.hostnames == ["vpn.example.com"]

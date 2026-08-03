@@ -92,7 +92,7 @@ class AppConfig(BaseModel):
     wireguard_interfaces: list[str] = Field(default_factory=list)
     device_subnets: list[str] = Field(default_factory=lambda: ["10.46.0.0/24"])
     wireguard_clients_path: str = "/host/wireguard/clients"
-    minion_port: int = 8000
+    minion_port: int = 8001
     public_ipv4_url: str = "https://ifconfig.me/ip"
     known_nodes: list[KnownNode] = Field(default_factory=list)
     minions: list[str] = Field(default_factory=list)

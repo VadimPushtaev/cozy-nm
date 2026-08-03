@@ -2,7 +2,7 @@
 {% block content %}
 <section class="page-head">
   <h1>Dashboard</h1>
-  <p>{{ devices|length }} clients from {{ device_subnets|join(', ') }}, {{ nodes|length }} known nodes, {{ warnings|length }} recent warnings</p>
+  <p>{{ devices|length }} VPN devices in {{ device_subnets|join(', ') }}, {{ nodes|length }} known nodes, {{ warnings|length }} recent warnings</p>
 </section>
 
 <section class="panel">
@@ -23,7 +23,7 @@
           <td class="nowrap"><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
         </tr>
       {% else %}
-        <tr><td colspan="7">No WireGuard client configs found in {{ device_subnets|join(', ') }} yet.</td></tr>
+        <tr><td colspan="7">No client-config or topology devices found in {{ device_subnets|join(', ') }} yet.</td></tr>
       {% endfor %}
       </tbody>
     </table>
@@ -58,7 +58,7 @@
   {% endfor %}
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Node</th><th>Bridge</th><th>Source</th><th>Destination</th><th>Status</th></tr></thead>
+      <thead><tr><th>Node</th><th>Bridge</th><th>Listen port</th><th>Destination</th><th>Status</th></tr></thead>
       <tbody>
       {% for row in forward_rows[:8] %}
         {% set project = row.project %}

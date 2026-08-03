@@ -1,9 +1,13 @@
-[tool.poetry]
+[project]
 name = "cozy-network-manager"
 version = "0.1.0"
-description = "Self-hosted WireGuard VPN network inspection dashboard"
-authors = ["Cozy Network Manager"]
+description = "Self-hosted WireGuard inventory dashboard with minion-managed port forwards"
+authors = [{ name = "Cozy Network Manager" }]
 readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dynamic = ["dependencies"]
+
+[tool.poetry]
 packages = [{ include = "cozy_network_manager" }]
 
 [tool.poetry.dependencies]
@@ -33,4 +37,3 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-

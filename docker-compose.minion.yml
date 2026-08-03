@@ -7,11 +7,11 @@ services:
       CNM_MODE: minion
       CNM_NODE_NAME: ${CNM_NODE_NAME:-cozy-minion}
       CNM_NODE_IP: ${CNM_NODE_IP:-}
-      CNM_LISTEN_PORT: ${CNM_MINION_PORT:-8000}
+      CNM_LISTEN_PORT: ${CNM_MINION_PORT:-8001}
       CNM_HOST_ROOT: /host
       CNM_BRIDGE_API_TOKEN: ${CNM_BRIDGE_API_TOKEN:-}
     ports:
-      - "${CNM_NODE_IP:-127.0.0.1}:${CNM_MINION_PORT:-8000}:${CNM_MINION_PORT:-8000}"
+      - "${CNM_NODE_IP:-127.0.0.1}:${CNM_MINION_PORT:-8001}:${CNM_MINION_PORT:-8001}"
     volumes:
       - ${CNM_CONFIG_FILE:-./config.example.yml}:/config/config.yml:ro
       - /etc/hostname:/host/etc/hostname:ro
@@ -22,4 +22,4 @@ services:
       - /sys:/host/sys:ro
       - /var/run/docker.sock:/var/run/docker.sock:rw
       - ${CNM_BRIDGE_COMPOSE_DIR:-/root/socat-docker}:${CNM_BRIDGE_COMPOSE_DIR:-/root/socat-docker}:rw
-    command: ["uvicorn", "cozy_network_manager.app.main:app", "--host", "0.0.0.0", "--port", "${CNM_MINION_PORT:-8000}"]
+    command: ["uvicorn", "cozy_network_manager.app.main:app", "--host", "0.0.0.0", "--port", "${CNM_MINION_PORT:-8001}"]

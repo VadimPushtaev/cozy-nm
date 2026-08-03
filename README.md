@@ -1,92 +1,133 @@
 # Cozy Network Manager
 
-Cozy Network Manager is a self-hosted FastAPI tool for inspecting a private WireGuard VPN network. It runs as either a `head` dashboard or a minion collector. Explicitly whitelisted minions can also manage a Socat Docker Compose project for their host.
+Cozy Network Manager is a self-hosted FastAPI dashboard for a private WireGuard network. A central **head** inventories WireGuard devices, polls host snapshots, resolves configured DNS names, stores history in PostgreSQL, and manages Socat port-forward projects through explicitly enabled **minions**.
 
-The head starts without a password and offers single-password browser authentication. Bind the head and minions only to trusted private VPN interfaces or localhost.
+The provided deployment runs everything in Docker. Keep the head and minion ports on trusted VPN addresses or loopback; the minion's inspection endpoints are intentionally not public-internet APIs.
 
-## Features
+## Architecture
 
-- Head mode with server-rendered dashboard, host WireGuard client inventory, node inventory, DNS mappings, port forwards, and warnings.
-- Minion mode with `GET /health`, `GET /api/v1/snapshot`, and authenticated bridge-management endpoints on explicitly whitelisted hosts.
-- PostgreSQL persistence for configured nodes, manual tags/notes, snapshots, DNS results, and warnings.
-- Best-effort collectors for host metadata, network interfaces, WireGuard, Docker containers, and socat forwarding containers.
-- YAML config with environment overrides.
-- Docker and Docker Compose examples for head and minion deployments.
+- The **head** serves the HTML dashboard and read API, collects its own host snapshot, polls remote minions, scans WireGuard client configs, and refreshes DNS mappings.
+- A **minion** exposes `GET /health` and `GET /api/v1/snapshot` for host inspection. On allowlisted bridge hosts it also exposes bearer-token-protected bridge-management endpoints.
+- **PostgreSQL** stores nodes, snapshots, device state, DNS results, manual metadata, and warnings.
+- The topology deployer starts PostgreSQL, the head, and a minion on the head host; other topology hosts run only a minion.
 
-## Host visibility warning
+The head read API includes:
 
-The Docker examples bind host paths into the container so the app can inspect the host:
+- `GET /api/v1/nodes`
+- `GET /api/v1/devices`
+- `GET /api/v1/nodes/{name}`
+- `GET /api/v1/snapshots/{name}`
 
-- `/etc/hostname`
-- `/etc/os-release`
-- `/etc/wireguard`
-- `/proc`
-- `/sys`
-- `/var/run/docker.sock`
+## Topology deployment
 
-These mounts provide elevated visibility into the host. The Docker socket can expose broad host control to code running in the container. Bridge-enabled minions intentionally receive write access to the socket and to their configured Compose folder. Use this only on trusted machines inside your private VPN.
+Prerequisites:
 
-## Head quick start
+- Docker Engine with the Docker Compose v2 plugin on every target host.
+- Python 3.12 or newer on the machine running `deploy.py`.
+- Working `root@<VPN-IP>` SSH key access to every remote target.
+- WireGuard already configured; Cozy-NM observes and manages services but does not create the VPN.
 
-Copy and edit the example config:
+Create the local, git-ignored deployment files:
 
 ```bash
 cp config.example.yml config.yml
 ```
 
-Update `device_subnets`, `wireguard_clients_path`, `deployment`, and `dns`, then run:
-
-```bash
-python deploy.py
-```
-
-`config.yml` is intentionally git-ignored so a real topology can stay local. A minimal deployment section looks like:
+Configure distinct head and minion ports, the VPN subnet, and all deployment targets. The head belongs in both `head` and `minions` because it also runs a local minion:
 
 ```yaml
+listen_port: 8000
+minion_port: 8001
+device_subnets:
+  - 10.46.0.0/24
+
 deployment:
-  head: 10.46.0.1
+  head: 10.46.0.10
   minions:
-    - 10.46.0.1
-    - 10.46.0.5
-    - 10.46.0.6
-minion_port: 18081
+    - 10.46.0.10
+    - 10.46.0.20
+    - 10.46.0.30
+
+dns:
+  domains:
+    - example.com
+  hostnames:
+    - vpn.example.com
 ```
 
-Start the head:
+If bridge management is enabled, put a long random token in the git-ignored `.env` file:
+
+```dotenv
+CNM_BRIDGE_API_TOKEN=<long-random-value>
+```
+
+Deploy the whole topology:
 
 ```bash
-docker compose up --build
+python3 deploy.py
 ```
 
-Open `http://localhost:8000`.
+The deployer first verifies SSH access to every remote target. It then stops the existing Cozy-NM project, replaces `/root/cozy-nm`, copies the local tree—including `config.yml` and `.env`—and rebuilds the required services. Local topology targets are deployed without SSH. Expect brief downtime.
 
-## Minion quick start
+The replacement does not delete Docker volumes or host paths outside `/root/cozy-nm`, so PostgreSQL data, head authentication state, WireGuard files, and external bridge project directories survive redeployment.
 
-On a VPN host that should report local data:
+Open the head at the configured VPN address and port, for example `http://10.46.0.10:8000`.
+
+Useful deploy options:
 
 ```bash
-docker compose -f docker-compose.minion.yml up --build
+python3 deploy.py --help
 ```
 
-For a shared topology config, pass the same config file and override only the local node name:
+## Manual Docker Compose
+
+For a loopback-only local stack using the example config:
 
 ```bash
-CNM_CONFIG_FILE=./config.yml CNM_NODE_NAME=ubuntu-8gb-hel1-1 docker compose -f docker-compose.minion.yml up --build
+docker compose up -d --build
 ```
 
-The minion serves:
+This starts PostgreSQL, the head on `127.0.0.1:8000`, and a minion on `127.0.0.1:8001`. Open `http://localhost:8000`.
 
-- `GET http://localhost:8000/health`
-- `GET http://localhost:8000/api/v1/snapshot`
+To bind a manually managed stack to a VPN address, provide the real config and node IP:
 
-List minion IPs under `deployment.minions`; the head derives each minion URL from that IP and `minion_port`. Set `minion_port` to a port that does not conflict with existing software on those hosts.
+```bash
+CNM_CONFIG_FILE=./config.yml CNM_NODE_IP=10.46.0.10 docker compose up -d --build
+```
+
+To run only a minion on another host:
+
+```bash
+CNM_CONFIG_FILE=./config.yml CNM_NODE_IP=10.46.0.20 docker compose -f docker-compose.minion.yml up -d --build
+```
+
+`CNM_NODE_IP` is the canonical node identity when set and controls the host-side bind address in the provided Compose files. `CNM_NODE_NAME` is a fallback identity for manual or compatibility configurations without a node IP.
 
 ## Configuration
 
-Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. Environment overrides:
+Primary application configuration is YAML. `CNM_CONFIG` selects the file inside the running process; `CNM_CONFIG_FILE` selects the host file mounted by Docker Compose.
 
+Important YAML settings:
+
+- `listen_port`: head HTTP port. It must differ from `minion_port` when both run on the head host.
+- `minion_port`: common HTTP port used by every minion; default `8001`.
+- `deployment.head` and `deployment.minions`: VPN IP topology used for deployment, polling, and inventory.
+- `device_subnets`: address ranges accepted from client configs and topology inventory.
+- `wireguard_clients_path`: directory containing client `.conf` files and optional matching `.pub` public-key files.
+- `wireguard_interfaces`: optional WireGuard interface filter; an empty list collects every interface.
+- `polling_interval_seconds`: local and remote snapshot/DNS refresh interval.
+- `device_scan_interval_seconds`: WireGuard device, ping, and minion-health scan interval.
+- `stale_after_seconds`: maximum snapshot/handshake age considered online.
+- `dns.domains` and `dns.hostnames`: DNS names inspected by the head.
+- `bridges.hosts`: minion IPs and Compose directories enabled for bridge management.
+- `head_auth_*`: head password state path, session lifetime, and secure-cookie behavior.
+
+Application environment overrides:
+
+- `CNM_CONFIG=/config/config.yml`
 - `CNM_MODE=head|minion`
 - `CNM_NODE_NAME=name`
+- `CNM_NODE_IP=10.46.0.10`
 - `CNM_LISTEN_HOST=0.0.0.0`
 - `CNM_LISTEN_PORT=8000`
 - `CNM_DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db`
@@ -95,66 +136,115 @@ Primary config is YAML. Set `CNM_CONFIG=/config/config.yml` to choose the file. 
 - `CNM_STALE_AFTER_SECONDS=300`
 - `CNM_HOST_ROOT=/host`
 - `CNM_WIREGUARD_CLIENTS_PATH=/host/wireguard/clients`
-- `CNM_MINION_PORT=8000`
+- `CNM_MINION_PORT=8001`
 - `CNM_PUBLIC_IPV4_URL=https://ifconfig.me/ip`
 - `CNM_BRIDGE_API_TOKEN=shared-secret`
 - `CNM_HEAD_AUTH_FILE=/var/lib/cozy-nm/auth/head-auth.json`
 - `CNM_HEAD_AUTH_SESSION_DAYS=30`
 - `CNM_HEAD_AUTH_COOKIE_SECURE=false`
 
-`wireguard_clients_path` points at the host directory containing client `.conf` and matching `.pub` files. The background scanner reads those configs every 10 seconds, matches each client public key against `wg show all dump`, pings the client IP, and checks `http://<client-ip>:<minion_port>/health` for the minion. `device_subnets` controls which client addresses are included. The example config defaults to `10.46.0.0/24`.
+Compose-only path and port overrides:
 
-`deployment` is the software placement plan. Device names are discovered from WireGuard client configs, so the deployment config only needs IPs.
+- `CNM_CONFIG_FILE=./config.yml`
+- `CNM_POSTGRES_PORT=15432`
+- `CNM_BRIDGE_COMPOSE_DIR=/root/socat-docker`
+- `CNM_HEAD_AUTH_DIR=/root/.config/cozy-nm`
 
-`dns.domains` lists domains to inspect, for example `pushtaev.ru`. For each domain the collector checks only `A` records for the root domain and for a random UUID subdomain, displayed as `*.domain` when it resolves. Use `dns.hostnames` for known names such as `mtg.pushtaev.ru`. DNS `A` records are matched against VPN IPs, WireGuard client endpoints, and the public IPv4 values reported by minions.
+Manual Compose uses PostgreSQL loopback port `5432` unless overridden; `deploy.py` defaults it to `15432` to avoid colliding with a host PostgreSQL installation.
 
-Minions report public IPv4 by calling `CNM_PUBLIC_IPV4_URL`, which defaults to `https://ifconfig.me/ip`.
+The provided Compose command binds the head with `CNM_NODE_IP` (or loopback when unset); changing only `listen_host`/`CNM_LISTEN_HOST` does not change that Docker bind. A custom Uvicorn launch must pass its desired `--host` explicitly.
 
-### Head password
+## Device and DNS inventory
 
-When no authentication file exists, the head is open and the navigation offers **Set password**. The password is stored as a salted scrypt hash; browser sessions last 30 days by default and are stored as token hashes. There is one shared password, with controls to change it or remove it under **Password**. Both operations require the current password.
+Every `device_scan_interval_seconds`, the head:
 
-Docker Compose persists the state at `/root/.config/cozy-nm/head-auth.json` on the head host. Anyone with SSH access can immediately restore passwordless access without restarting the service:
+1. Loads client addresses from `wireguard_clients_path`, restricted to `device_subnets`.
+2. Adds topology nodes that do not have a local client config, including the head.
+3. Matches public keys against `wg show all dump` and treats a recent handshake as connected.
+4. Pings each VPN IP and checks `http://<VPN-IP>:<minion_port>/health`.
+
+The displayed current public IP is derived from the WireGuard peer endpoint and is shown as current only while the peer is connected. Minion snapshots separately discover each host's public IPv4 through `CNM_PUBLIC_IPV4_URL`.
+
+DNS inspection resolves only `A` records. For every `dns.domains` entry it checks the root and one random subdomain to detect wildcard DNS; `dns.hostnames` adds explicit names. Results are matched against VPN IPs, WireGuard peer endpoints, and public IPv4 values reported by snapshots.
+
+## Head password authentication
+
+The head starts without a password. Anyone who can reach it can use **Set password**, so set one promptly if the VPN contains users who should not administer the head.
+
+- There is one shared password with a minimum length of eight characters.
+- The password is stored as a salted scrypt hash; plaintext is never saved.
+- Raw 256-bit session tokens are kept only in `HttpOnly`, `SameSite=Lax` browser cookies; only token hashes are persisted.
+- Sessions last 30 days by default and survive container restarts.
+- Failed password attempts receive an increasing per-IP delay, capped at 30 seconds.
+- Changing the password signs out every other session and gives the requesting browser a new session.
+- Removing the password immediately returns the head to passwordless mode.
+
+Once configured, the head UI and API require a valid session. `/health`, login/setup routes, and static assets remain reachable as required for health checks and sign-in. Unsafe authenticated requests require a same-origin browser submission.
+
+Docker Compose stores authentication state on the host at `/root/.config/cozy-nm/head-auth.json`, bind-mounted inside the head container. An SSH administrator can disable authentication immediately, without restarting Docker:
 
 ```bash
 rm -f /root/.config/cozy-nm/head-auth.json
 ```
 
-If the head is served through HTTPS, set `CNM_HEAD_AUTH_COOKIE_SECURE=true`. Authentication protects the head UI and API, except `GET /health`; minion bridge APIs continue to use their bearer token.
+An existing but unreadable or malformed auth file fails closed with HTTP 503. If the head is served through HTTPS, set `CNM_HEAD_AUTH_COOKIE_SECURE=true`. With plain HTTP, rely on WireGuard to encrypt the browser connection.
 
-### Socat bridge management
+## Minion and host security
 
-Bridge hosts are an explicit allowlist. The head never accepts a Compose path from a browser request; it looks up the selected VPN IP in this configuration and calls that host's minion with the shared bearer token:
+Minion `GET /health` and `GET /api/v1/snapshot` are unauthenticated. Keep the minion bind private to loopback or WireGuard.
+
+Bridge-management endpoints require `Authorization: Bearer <CNM_BRIDGE_API_TOKEN>`. The token is sent over HTTP, so its confidentiality depends on WireGuard unless HTTPS is added. `bridges.hosts` enables bridge management for the listed minion IP and directory; it is not a caller-IP access-control list. Anyone who can reach a minion and obtain the shared token can issue bridge commands.
+
+The Docker examples mount host paths so collectors can inspect the host:
+
+- `/etc/hostname`, `/etc/os-release`, `/etc/wireguard`, `/proc`, and `/sys`
+- `/root/wireguard/clients`
+- `/var/run/docker.sock`
+
+The head's Docker socket bind is marked read-only, while minions receive a read-write bind because bridge actions control containers. A read-only socket mount does not make the Docker API read-only: access to the daemon socket can still amount to host-level control. The configured bridge project directory is also writable by the minion. Run these containers only on trusted hosts.
+
+## Socat bridge management
+
+Bridge hosts are an explicit management allowlist:
 
 ```yaml
 bridges:
   hosts:
-    - node_ip: 10.46.0.1
+    - node_ip: 10.46.0.10
       compose_dir: /root/socat-docker
-    - node_ip: 10.46.0.5
+    - node_ip: 10.46.0.20
       compose_dir: /root/socat-docker
+      compose_file: docker-compose.yml
 ```
 
-Set the same non-empty `CNM_BRIDGE_API_TOKEN` for the head and bridge-enabled minions. A convenient deployment setup is a git-ignored `.env` beside the Compose file containing `CNM_BRIDGE_API_TOKEN=<long-random-value>`; `.env` is excluded from the Docker build context. The Compose examples mount `/root/socat-docker` and the Docker socket read-write into the minion. Keep the minion port private to WireGuard hosts.
+The same non-empty `CNM_BRIDGE_API_TOKEN` must be available to the head and every bridge-enabled minion. The Compose examples mount `CNM_BRIDGE_COMPOSE_DIR`, which defaults to `/root/socat-docker`.
 
-The UI edits only a constrained bridge shape: bridge name, listening port, target host, and target port. Saving updates `docker-compose.yml` atomically and keeps backups under `.cozy-nm/backups`; it does not change running containers. **Apply project** runs `docker compose up -d --build --remove-orphans` (or `down` for an empty project). **Restart project** restarts existing services without applying saved changes. Existing services that do not match the managed shape remain visible and read-only.
+Each configured directory must already exist and contain a Dockerfile that builds a `socat-bridge:latest` image capable of using `LISTEN_PORT`, `TARGET_HOST`, and `TARGET_PORT`. The Compose file may initially be absent; the first UI save creates it.
 
-When running in Docker, the head container must be able to read the host client directory and host WireGuard state. The compose example mounts `/root/wireguard/clients` as read-only and runs the head service with the host network namespace plus `NET_ADMIN` so `wg show all dump` can inspect the host interface. If that is not acceptable for your deployment, run the head directly on the host instead.
+The UI manages only a constrained service shape: service/container name, host listen port, IPv4 or DNS target, and target port. Unsupported service definitions remain visible and read-only. Saving validates and atomically rewrites the Compose YAML but does not change running containers. YAML comments and formatting are not preserved.
 
-The MVP only allows editing manual node tags and notes in the UI. Node identity and expected VPN IP are config-owned.
+Before each replacement, the previous Compose file is copied to `.cozy-nm/backups`; the newest 20 backups are retained. Cozy-NM also records the last applied file hash there and ensures `.cozy-nm/` is excluded from the bridge Docker build context.
+
+- **Apply project** runs `docker compose up -d --build --remove-orphans`, or `down --remove-orphans` when no services remain.
+- **Restart project** restarts currently configured services without applying saved changes.
+- Per-bridge **Start**, **Stop**, and **Restart** act on the current saved service.
+- Deleted services remain as pending-removal orphans until the project is applied.
+
+## Persistence
+
+- PostgreSQL uses the `postgres-data` named Docker volume.
+- Head authentication uses the host directory selected by `CNM_HEAD_AUTH_DIR`.
+- Bridge Compose projects and backups live in the configured host directories.
+- `config.yml` and `.env` live in the application directory and are recopied by `deploy.py`.
 
 ## Local development
 
 ```bash
 poetry install
-poetry run pytest
+make pre-commit
 CNM_CONFIG=config.example.yml poetry run uvicorn cozy_network_manager.app.main:app --reload
 ```
 
-For local head development without Docker, set `CNM_DATABASE_URL` to a reachable PostgreSQL database.
+Head mode requires a reachable PostgreSQL database. For direct development, set `CNM_DATABASE_URL`; Uvicorn's `--host` and `--port` flags control the development server bind.
 
-## Notes
-
-- WireGuard inspection uses `wg show all dump` when available and reports a warning when missing or denied.
-- DNS inspection checks root domains, wildcard DNS through a random UUID probe, and explicit `dns.hostnames`; it does not brute-force subdomains.
-- Socat parsing is best-effort. Unknown destinations are displayed as unknown instead of failing collection.
+Collectors are best-effort. Missing commands, permissions, DNS failures, public-IP lookup failures, and unavailable minions are recorded as warnings instead of terminating the head.

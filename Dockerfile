@@ -23,5 +23,5 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}" \
 COPY . .
 RUN poetry install --only main
 
-EXPOSE 8000
+EXPOSE 8000 8001
 CMD ["uvicorn", "cozy_network_manager.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

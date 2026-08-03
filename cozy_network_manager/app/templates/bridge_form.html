@@ -10,11 +10,11 @@
     <label for="name">Service name</label>
     <input id="name" name="name" value="{{ bridge.name if bridge else '' }}" pattern="[A-Za-z0-9][A-Za-z0-9_.-]{0,119}" required>
 
-    <label for="listen_port">Public listen port</label>
+    <label for="listen_port">Host listen port</label>
     <input id="listen_port" name="listen_port" type="number" min="1" max="65535" value="{{ bridge.listen_port if bridge else '' }}" required>
 
     <label for="target_host">Target host</label>
-    <input id="target_host" name="target_host" value="{{ bridge.target_host if bridge else '' }}" placeholder="10.46.0.6" required>
+    <input id="target_host" name="target_host" value="{{ bridge.target_host if bridge else '' }}" placeholder="10.46.0.20" required>
 
     <label for="target_port">Target port</label>
     <input id="target_port" name="target_port" type="number" min="1" max="65535" value="{{ bridge.target_port if bridge else '' }}" required>
