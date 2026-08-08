@@ -122,19 +122,6 @@ def _resolve_hostname(
     return mappings
 
 
-def resolve_hostnames(
-    hostnames: list[str],
-    nodes: list[Node],
-    devices: list[Device] | None = None,
-) -> list[DnsMapping]:
-    resolver = dns.resolver.Resolver()
-    node_ip_map = build_dns_ip_map(nodes, devices)
-    mappings: list[DnsMapping] = []
-    for hostname in sorted(set(hostnames)):
-        mappings.extend(_resolve_hostname(resolver, hostname, node_ip_map, warn_on_missing=True))
-    return mappings
-
-
 def resolve_domains(
     domains: list[str],
     hostnames: list[str],

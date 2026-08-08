@@ -21,12 +21,12 @@ def get_or_create_node(db: Session, name: str, expected_vpn_ip: str = "unknown")
     return node
 
 
-def store_snapshot(db: Session, node: Node, snapshot: Snapshot, reachable: bool = True) -> SnapshotRecord:
+def store_snapshot(db: Session, node: Node, snapshot: Snapshot) -> SnapshotRecord:
     record = SnapshotRecord(
         node_id=node.id,
         snapshot=snapshot.model_dump(mode="json"),
         collected_at=snapshot.timestamp,
-        reachable=reachable,
+        reachable=True,
     )
     db.add(record)
     for item in [*snapshot.warnings, *snapshot.errors]:
@@ -72,11 +72,9 @@ def node_summary(
         rows.append(
             {
                 "node": node,
-                "snapshot": snapshot,
                 "stale": stale,
                 "age_seconds": age_seconds,
                 "online": bool(snapshot and not stale),
-                "manual_only": not node.minion_api_url,
             }
         )
     return rows

@@ -327,58 +327,6 @@ dd {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.graph {
-  overflow-x: auto;
-}
-
-.graph svg {
-  display: block;
-  width: 100%;
-  min-width: 640px;
-  height: auto;
-}
-
-.graph .edge {
-  stroke: #8ba5b4;
-  stroke-width: 2;
-}
-
-.graph .edge.online {
-  stroke: var(--ok);
-}
-
-.graph .edge.stale {
-  stroke: #c79a4a;
-  stroke-dasharray: 6 6;
-}
-
-.graph .node {
-  stroke: #102a3a;
-  stroke-width: 3;
-}
-
-.graph .node.online {
-  fill: #daf2e8;
-}
-
-.graph .node.stale {
-  fill: #fff1d6;
-}
-
-.graph .node.gateway {
-  fill: #e3edf7;
-}
-
-.graph text {
-  fill: var(--text);
-  font-size: 13px;
-}
-
-.graph text.subtext {
-  fill: var(--muted);
-  font-size: 11px;
-}
-
 @media (max-width: 760px) {
   .topbar {
     align-items: flex-start;

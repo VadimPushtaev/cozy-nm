@@ -83,7 +83,6 @@ class AppConfig(BaseModel):
     mode: Mode = "head"
     node_name: str = "cozy-head"
     node_ip: str | None = None
-    listen_host: str = "0.0.0.0"
     listen_port: int = 8000
     database_url: str = "postgresql+psycopg://cozy:cozy@postgres:5432/cozy_network_manager"
     polling_interval_seconds: int = 60
@@ -216,7 +215,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         "mode": os.getenv("CNM_MODE", config.mode),
         "node_name": os.getenv("CNM_NODE_NAME", config.node_name),
         "node_ip": os.getenv("CNM_NODE_IP", config.node_ip or "") or None,
-        "listen_host": os.getenv("CNM_LISTEN_HOST", config.listen_host),
         "listen_port": _env_int("CNM_LISTEN_PORT", config.listen_port),
         "database_url": os.getenv("CNM_DATABASE_URL", config.database_url),
         "polling_interval_seconds": _env_int(

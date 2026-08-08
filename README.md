@@ -128,7 +128,6 @@ Application environment overrides:
 - `CNM_MODE=head|minion`
 - `CNM_NODE_NAME=name`
 - `CNM_NODE_IP=10.46.0.10`
-- `CNM_LISTEN_HOST=0.0.0.0`
 - `CNM_LISTEN_PORT=8000`
 - `CNM_DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db`
 - `CNM_POLLING_INTERVAL_SECONDS=60`
@@ -152,7 +151,7 @@ Compose-only path and port overrides:
 
 Manual Compose uses PostgreSQL loopback port `5432` unless overridden; `deploy.py` defaults it to `15432` to avoid colliding with a host PostgreSQL installation.
 
-The provided Compose command binds the head with `CNM_NODE_IP` (or loopback when unset); changing only `listen_host`/`CNM_LISTEN_HOST` does not change that Docker bind. A custom Uvicorn launch must pass its desired `--host` explicitly.
+The provided Compose command binds the head with `CNM_NODE_IP` (or loopback when unset). A custom Uvicorn launch must pass its desired `--host` explicitly.
 
 ## Device and DNS inventory
 
