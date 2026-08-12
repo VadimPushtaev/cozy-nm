@@ -9,11 +9,11 @@
   <h2>WireGuard devices</h2>
   <div class="table-scroll">
     <table class="device-table">
-      <thead><tr><th>Client</th><th>Hostname</th><th>Internal IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
+      <thead><tr><th>Client</th><th>Hostname</th><th>IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
       <tbody>
       {% for row in device_rows[:8] %}
         {% set device = row.device %}
-        <tr>
+        <tr{% if row.client == 'head' %} class="main-node"{% endif %}>
           <td class="client-cell">{{ row.client }}</td>
           <td class="hostname-cell">{{ row.hostname }}</td>
           <td class="mono nowrap">{{ device.ip }}</td>
@@ -86,13 +86,15 @@
 
 <section class="panel">
   <h2>Recent warnings</h2>
-  <table>
-    <thead><tr><th>Time</th><th>Node</th><th>Source</th><th>Message</th></tr></thead>
-    <tbody>
-    {% for warning in warnings %}
-      <tr><td>{{ warning.created_at }}</td><td>{{ warning.node_name or '' }}</td><td>{{ warning.source }}</td><td>{{ warning.message }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Node</th><th>Source</th><th>Message</th></tr></thead>
+      <tbody>
+      {% for warning in warnings %}
+        <tr><td>{{ warning.created_at }}</td><td>{{ warning.node_name or '' }}</td><td>{{ warning.source }}</td><td>{{ warning.message }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

@@ -5,18 +5,20 @@
   <p>A records for configured domains and hostnames, mapped to VPN and observed public IPs.</p>
 </section>
 <section class="panel">
-  <table>
-    <thead><tr><th>Hostname</th><th>Type</th><th>Target</th><th>Matched node</th><th>Warning</th><th>Resolved</th></tr></thead>
-    <tbody>
-    {% for record in records %}
-      <tr>
-        <td>{{ record.hostname }}</td><td>{{ record.record_type }}</td><td>{{ record.target }}</td>
-        <td>{{ record.matched_node or '' }}</td>
-        <td>{% if record.outside_vpn or record.warning %}<span class="badge warn">{{ record.warning or 'outside VPN' }}</span>{% endif %}</td>
-        <td>{{ record.resolved_at }}</td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Hostname</th><th>Type</th><th>Target</th><th>Matched node</th><th>Warning</th><th>Resolved</th></tr></thead>
+      <tbody>
+      {% for record in records %}
+        <tr>
+          <td>{{ record.hostname }}</td><td>{{ record.record_type }}</td><td>{{ record.target }}</td>
+          <td>{{ record.matched_node or '' }}</td>
+          <td>{% if record.outside_vpn or record.warning %}<span class="badge warn">{{ record.warning or 'outside VPN' }}</span>{% endif %}</td>
+          <td>{{ record.resolved_at }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
