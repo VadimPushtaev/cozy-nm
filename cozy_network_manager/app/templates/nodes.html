@@ -15,7 +15,9 @@
       <tr{% if row.client == 'head' %} class="main-node"{% endif %}>
         <td class="client-cell">{{ row.client }}</td>
         <td class="hostname-cell">{{ row.hostname }}</td>
-        <td class="mono nowrap">{{ device.ip }}</td>
+        <td class="mono nowrap">
+          {% if row.node_name %}<a href="/nodes/{{ row.node_name }}">{{ device.ip }}</a>{% else %}{{ device.ip }}{% endif %}
+        </td>
         <td class="mono nowrap">{{ device.current_public_ip or '' }}</td>
         <td class="nowrap"><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
         <td class="nowrap"><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>

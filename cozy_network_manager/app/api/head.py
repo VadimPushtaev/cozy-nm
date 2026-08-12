@@ -66,6 +66,10 @@ def _latest_hostnames_by_ip(db: Session) -> dict[str, str]:
 
 def _device_rows(db: Session, config) -> list[dict]:
     hostnames_by_ip = _latest_hostnames_by_ip(db)
+    node_names_by_ip = {
+        node.expected_vpn_ip: node.name
+        for node in db.query(Node).order_by(Node.name).all()
+    }
     rows = []
     for device in device_inventory(db):
         hostname = hostnames_by_ip.get(device.ip) or _reverse_hostname(device.ip)
@@ -76,6 +80,7 @@ def _device_rows(db: Session, config) -> list[dict]:
                 "device": device,
                 "client": _device_client_label(device, config),
                 "hostname": hostname or "",
+                "node_name": node_names_by_ip.get(device.ip),
             }
         )
     return rows
