@@ -37,6 +37,27 @@
 
 {% if snapshot %}
 <section class="panel">
+  <h2>Public interfaces</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Service</th><th>VPN URL</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for interface in snapshot.snapshot.get('public_interfaces', []) %}
+        {% set interface_status = 'stale' if snapshot_stale else interface.status %}
+        <tr>
+          <td>{{ interface.service }}</td>
+          <td class="mono"><a href="{{ interface.url }}" target="_blank" rel="noopener noreferrer">{{ interface.url }}</a></td>
+          <td><span class="badge {{ 'ok' if interface_status == 'up' else 'warn' }}">{{ interface_status }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3">No VPN web interfaces reported.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
   <h2>WireGuard</h2>
   <div class="table-scroll">
     <table>

@@ -31,6 +31,27 @@
 </section>
 
 <section class="panel">
+  <h2>Public interfaces</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Node</th><th>Service</th><th>VPN URL</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for row in public_interface_rows %}
+        <tr>
+          <td class="nowrap"><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
+          <td>{{ row.service }}</td>
+          <td class="mono"><a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.url }}</a></td>
+          <td><span class="badge {{ 'ok' if row.status == 'up' else 'warn' }}">{{ row.status }}</span></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4">No VPN web interfaces reported.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
   <h2>DNS mappings</h2>
   <div class="table-scroll">
     <table>

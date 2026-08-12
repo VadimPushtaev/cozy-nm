@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+from datetime import datetime, timezone
 from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -141,6 +142,32 @@ def _bridge_rows(projects: list[dict]) -> list[dict]:
     ]
 
 
+def _snapshot_is_stale(snapshot: SnapshotRecord, stale_after_seconds: int) -> bool:
+    collected_at = snapshot.collected_at
+    if collected_at.tzinfo is None:
+        collected_at = collected_at.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - collected_at).total_seconds() > stale_after_seconds
+
+
+def _public_interface_rows(db: Session, stale_after_seconds: int) -> list[dict]:
+    rows = []
+    for node in db.query(Node).order_by(Node.name).all():
+        snapshot = latest_snapshot(db, node.id)
+        if snapshot is None:
+            continue
+        stale = _snapshot_is_stale(snapshot, stale_after_seconds)
+        for interface in snapshot.snapshot.get("public_interfaces", []):
+            rows.append(
+                {
+                    "node": node,
+                    "service": interface.get("service", "unknown"),
+                    "url": interface.get("url", ""),
+                    "status": "stale" if stale else interface.get("status", "down"),
+                }
+            )
+    return sorted(rows, key=lambda row: (row["node"].name, row["service"], row["url"]))
+
+
 def _same_origin(request: Request) -> None:
     expected_host = request.headers.get("host", "")
     origin = request.headers.get("origin")
@@ -184,6 +211,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "device_rows": device_rows,
             "device_subnets": config.device_subnets,
             "dns_records": dns,
+            "public_interface_rows": _public_interface_rows(db, config.stale_after_seconds),
             "forward_rows": _bridge_rows(bridge_projects),
             "bridge_projects": bridge_projects,
             "warnings": warnings,
@@ -212,10 +240,17 @@ def node_detail(request: Request, name: str, db: Session = Depends(get_db)):
     if node is None:
         raise HTTPException(status_code=404)
     snapshot = latest_snapshot(db, node.id)
+    config = get_config()
     return templates.TemplateResponse(
         request,
         "node_detail.html",
-        {"node": node, "snapshot": snapshot},
+        {
+            "node": node,
+            "snapshot": snapshot,
+            "snapshot_stale": bool(
+                snapshot and _snapshot_is_stale(snapshot, config.stale_after_seconds)
+            ),
+        },
     )
 
 

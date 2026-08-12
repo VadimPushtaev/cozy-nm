@@ -7,7 +7,7 @@ The provided deployment runs everything in Docker. Keep the head and minion port
 ## Architecture
 
 - The **head** serves the HTML dashboard and read API, collects its own host snapshot, polls remote minions, scans WireGuard client configs, and refreshes DNS mappings.
-- A **minion** exposes `GET /health` and `GET /api/v1/snapshot` for host inspection. On allowlisted bridge hosts it also exposes bearer-token-protected bridge-management endpoints.
+- A **minion** exposes `GET /health` and `GET /api/v1/snapshot` for host inspection, including VPN-reachable nginx and Transmission web interfaces. On allowlisted bridge hosts it also exposes bearer-token-protected bridge-management endpoints.
 - **PostgreSQL** stores nodes, snapshots, device state, DNS results, manual metadata, and warnings.
 - The topology deployer starts PostgreSQL, the head, and a minion on the head host; other topology hosts run only a minion.
 
@@ -196,11 +196,13 @@ Bridge-management endpoints require `Authorization: Bearer <CNM_BRIDGE_API_TOKEN
 
 The Docker examples mount host paths so collectors can inspect the host:
 
-- `/etc/hostname`, `/etc/os-release`, `/etc/wireguard`, `/proc`, and `/sys`
+- `/etc`, `/proc`, and `/sys`
 - `/root/wireguard/clients`
 - `/var/run/docker.sock`
 
 The head's Docker socket bind is marked read-only, while minions receive a read-write bind because bridge actions control containers. A read-only socket mount does not make the Docker API read-only: access to the daemon socket can still amount to host-level control. The configured bridge project directory is also writable by the minion. Run these containers only on trusted hosts.
+
+Snapshots report configured nginx and Transmission browser interfaces reachable through each node's VPN IP. nginx virtual hosts that share a protocol and port are collapsed into one interface. A configured interface remains visible as `down` when its service process or TCP listener is absent, and stale snapshots are labelled accordingly in the head UI. Raw service configuration and credentials are never included in snapshots.
 
 ## Socat bridge management
 

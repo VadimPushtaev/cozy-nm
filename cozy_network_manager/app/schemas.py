@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -65,6 +65,12 @@ class SocatForward(BaseModel):
     destination_port: int | None = None
 
 
+class PublicInterface(BaseModel):
+    service: Literal["nginx", "transmission"]
+    url: str
+    status: Literal["up", "down"]
+
+
 class BridgeDefinitionInput(BaseModel):
     name: str
     listen_port: int
@@ -117,5 +123,6 @@ class Snapshot(BaseModel):
     wireguard: list[WireGuardInterface] = Field(default_factory=list)
     docker_containers: list[DockerContainer] = Field(default_factory=list)
     socat_forwards: list[SocatForward] = Field(default_factory=list)
+    public_interfaces: list[PublicInterface] = Field(default_factory=list)
     warnings: list[CollectorMessage] = Field(default_factory=list)
     errors: list[CollectorMessage] = Field(default_factory=list)

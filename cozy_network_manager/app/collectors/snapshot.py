@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from cozy_network_manager.app.collectors.docker import collect_docker
 from cozy_network_manager.app.collectors.host import collect_host
+from cozy_network_manager.app.collectors.public_interfaces import collect_public_interfaces
 from cozy_network_manager.app.collectors.wireguard import collect_wireguard
 from cozy_network_manager.app.config import AppConfig
 from cozy_network_manager.app.schemas import Snapshot
@@ -29,12 +30,22 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
         forwards = []
         errors.append({"source": "docker", "message": str(exc)})
 
+    try:
+        public_interfaces, interface_warnings = collect_public_interfaces(
+            config.host_root, config.node_ip
+        )
+        warnings.extend(interface_warnings)
+    except Exception as exc:
+        public_interfaces = []
+        errors.append({"source": "public-interfaces", "message": str(exc)})
+
     return Snapshot(
         node_name=config.node_name,
         host=host,
         wireguard=wireguard,
         docker_containers=containers,
         socat_forwards=forwards,
+        public_interfaces=public_interfaces,
         warnings=warnings,
         errors=errors,
     )

@@ -8,3 +8,4 @@ def test_bridge_templates_load():
     templates.env.get_template("auth_setup.html")
     templates.env.get_template("auth_login.html")
     templates.env.get_template("auth_settings.html")
+    templates.env.get_template("node_detail.html")
