@@ -5,7 +5,7 @@
   <p>{{ node.expected_vpn_ip }}{% if node.os_override %} · {{ node.os_override }}{% endif %}</p>
 </section>
 
-<section class="grid two">
+<section class="grid{% if device or snapshot %} two{% endif %}">
   <div class="panel">
     <h2>Manual metadata</h2>
     <form method="post" action="/nodes/{{ node.name }}/metadata">
@@ -17,51 +17,60 @@
     </form>
   </div>
 
+  {% if device or snapshot %}
   <div class="panel">
-    <h2>Host</h2>
+    <h2>Status</h2>
+    <dl>
+      {% if device %}
+        <dt>Client</dt><dd>{{ device.name }}</dd>
+        <dt>Public IP</dt><dd>{{ device.current_public_ip or '' }}</dd>
+        <dt>WireGuard</dt><dd><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></dd>
+        <dt>Ping</dt><dd><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></dd>
+        <dt>Minion</dt><dd><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'unavailable' }}</span></dd>
+        <dt>Last check</dt><dd>{{ device.last_checked_at }}</dd>
+      {% endif %}
     {% if snapshot %}
       {% set host = snapshot.snapshot.host %}
-      <dl>
         <dt>Snapshot</dt><dd>{{ snapshot.collected_at }}</dd>
         <dt>Hostname</dt><dd>{{ host.hostname }}</dd>
         <dt>Public IPv4</dt><dd>{{ host.public_ipv4 or '' }}</dd>
         <dt>OS</dt><dd>{{ host.os_name }} {{ host.os_version or '' }}</dd>
         <dt>Kernel</dt><dd>{{ host.kernel_version }}</dd>
         <dt>Architecture</dt><dd>{{ host.architecture }}</dd>
-      </dl>
-    {% else %}
-      <p>No snapshot collected yet.</p>
     {% endif %}
+      {% if node.configured_tags %}<dt>Configured tags</dt><dd>{{ node.configured_tags|join(', ') }}</dd>{% endif %}
+    </dl>
   </div>
+  {% endif %}
 </section>
 
+{% if sshfs_mount_rows %}
 <section class="panel">
   <h2>SSHFS mounts</h2>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Initiator IP</th><th>Target IP</th><th>Dir on initiator</th><th>Dir on target</th><th>Windows dir on target</th></tr></thead>
+      <thead><tr><th>Initiator</th><th>Target</th><th>Dir on initiator</th><th>Dir on target</th><th>Windows dir on target</th></tr></thead>
       <tbody>
       {% for row in sshfs_mount_rows %}
         <tr>
-          <td class="mono nowrap"><a href="/nodes/{{ row.initiator_node.name }}">{{ row.initiator_ip }}</a></td>
-          <td class="mono nowrap">
+          <td class="nowrap"><a href="/nodes/{{ row.initiator_node.name }}">{{ row.initiator_name }}</a></td>
+          <td class="nowrap">
             {% if row.target_node %}<a href="/nodes/{{ row.target_node.name }}">{% endif %}
-            {{ row.target_ip or ('unknown (' ~ row.target_host ~ ')') }}
+            {{ row.target_name }}
             {% if row.target_node %}</a>{% endif %}
           </td>
           <td class="mono">{{ row.initiator_directory }}</td>
           <td class="mono">{{ row.target_directory or 'unknown' }}</td>
           <td class="mono">{{ row.windows_directory or '' }}</td>
         </tr>
-      {% else %}
-        <tr><td colspan="5">No active SSHFS mounts involving this node.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+{% endif %}
 
-{% if snapshot %}
+{% if snapshot and snapshot.snapshot.get('public_interfaces', []) %}
 <section class="panel">
   <h2>Public interfaces</h2>
   <div class="table-scroll">
@@ -75,14 +84,14 @@
           <td class="mono"><a href="{{ interface.url }}" target="_blank" rel="noopener noreferrer">{{ interface.url }}</a></td>
           <td><span class="badge {{ 'ok' if interface_status == 'up' else 'warn' }}">{{ interface_status }}</span></td>
         </tr>
-      {% else %}
-        <tr><td colspan="3">No VPN web interfaces reported.</td></tr>
       {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+{% endif %}
 
+{% if snapshot and snapshot.snapshot.get('wireguard', []) %}
 <section class="panel">
   <h2>WireGuard</h2>
   <div class="table-scroll">
@@ -103,7 +112,9 @@
     </table>
   </div>
 </section>
+{% endif %}
 
+{% if snapshot and snapshot.snapshot.get('docker_containers', []) %}
 <section class="panel">
   <h2>Docker containers</h2>
   <div class="table-scroll">

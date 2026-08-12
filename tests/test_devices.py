@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
-from cozy_network_manager.app.db.models import Device
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
 from cozy_network_manager.app.config import AppConfig, DeploymentConfig
+from cozy_network_manager.app.db.models import Device, Node
+from cozy_network_manager.app.db.session import Base
 from cozy_network_manager.app.services.devices import (
+    DeviceStatus,
     load_client_configs,
     parse_client_config,
     parse_wg_peer_states,
     scan_wireguard_clients,
+    store_device_statuses,
 )
 
 
@@ -142,4 +149,57 @@ def test_scan_wireguard_clients_does_not_duplicate_configured_clients(monkeypatc
     assert [(status.name, status.ip) for status in statuses] == [
         ("ubuntu", "10.46.0.5"),
         ("10.46.0.1", "10.46.0.1"),
+    ]
+
+
+def test_store_device_statuses_creates_nodes_and_reuses_configured_ips():
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    now = datetime.now(timezone.utc)
+    statuses = [
+        DeviceStatus(
+            name="ruvps",
+            ip="10.46.0.1",
+            address="10.46.0.1/32",
+            public_key="one",
+            config_path="one.conf",
+            interface="wg0",
+            endpoint=None,
+            latest_handshake=None,
+            transfer_rx=None,
+            transfer_tx=None,
+            wg_connected=True,
+            pingable=True,
+            minion_available=True,
+            minion_url="http://10.46.0.1:18081",
+            last_checked_at=now,
+        ),
+        DeviceStatus(
+            name="phone",
+            ip="10.46.0.8",
+            address="10.46.0.8/32",
+            public_key="eight",
+            config_path="phone.conf",
+            interface="wg0",
+            endpoint=None,
+            latest_handshake=None,
+            transfer_rx=None,
+            transfer_tx=None,
+            wg_connected=False,
+            pingable=False,
+            minion_available=False,
+            minion_url="http://10.46.0.8:18081",
+            last_checked_at=now,
+        ),
+    ]
+
+    with Session(engine) as db:
+        db.add(Node(name="head", expected_vpn_ip="10.46.0.1"))
+        db.commit()
+        store_device_statuses(db, statuses)
+        nodes = db.query(Node).order_by(Node.expected_vpn_ip).all()
+
+    assert [(node.name, node.expected_vpn_ip) for node in nodes] == [
+        ("head", "10.46.0.1"),
+        ("phone", "10.46.0.8"),
     ]

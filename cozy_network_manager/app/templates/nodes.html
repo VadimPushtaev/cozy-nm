@@ -33,7 +33,7 @@
 </section>
 
 <section class="panel">
-  <h2>Configured nodes</h2>
+  <h2>Nodes</h2>
   <div class="table-scroll">
   <table>
     <thead><tr><th>Name</th><th>VPN IP</th><th>Minion</th><th>Status</th><th>Snapshot age</th><th>Tags</th></tr></thead>
@@ -42,8 +42,12 @@
       <tr>
         <td><a href="/nodes/{{ row.node.name }}">{{ row.node.name }}</a></td>
         <td>{{ row.node.expected_vpn_ip }}</td>
-        <td>{{ row.node.minion_api_url or 'static/local' }}</td>
-        <td><span class="badge {{ 'ok' if row.online else 'warn' }}">{{ 'online' if row.online else 'stale/static' }}</span></td>
+        <td>{{ row.node.minion_api_url or '' }}</td>
+        <td>
+          {% if row.online %}<span class="badge ok">online</span>
+          {% elif row.age_seconds is none %}<span class="badge warn">no snapshot</span>
+          {% else %}<span class="badge warn">stale</span>{% endif %}
+        </td>
         <td>{{ row.age_seconds|round|int if row.age_seconds is not none else 'never' }}{% if row.age_seconds is not none %}s{% endif %}</td>
         <td>{{ (row.node.configured_tags + row.node.manual_tags)|join(', ') }}</td>
       </tr>

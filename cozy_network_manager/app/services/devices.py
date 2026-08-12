@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from ipaddress import ip_address, ip_interface, ip_network
@@ -11,7 +12,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from cozy_network_manager.app.config import AppConfig
-from cozy_network_manager.app.db.models import Device
+from cozy_network_manager.app.db.models import Device, Node
 
 
 @dataclass(frozen=True)
@@ -303,7 +304,34 @@ def store_device_statuses(db: Session, statuses: list[DeviceStatus]) -> None:
         device.minion_available = status.minion_available
         device.minion_url = status.minion_url
         device.last_checked_at = status.last_checked_at
+
+    ensure_device_nodes(db, statuses)
     db.commit()
+
+
+def ensure_device_nodes(db: Session, devices: Iterable[DeviceStatus | Device]) -> None:
+    nodes = db.query(Node).order_by(Node.id).all()
+    nodes_by_ip: dict[str, Node] = {}
+    names = set()
+    for node in nodes:
+        nodes_by_ip.setdefault(node.expected_vpn_ip, node)
+        names.add(node.name)
+
+    for device in devices:
+        if device.ip in nodes_by_ip:
+            continue
+        name = device.name
+        if name in names:
+            name = device.ip
+        suffix = 2
+        base_name = name
+        while name in names:
+            name = f"{base_name}-{suffix}"
+            suffix += 1
+        node = Node(name=name, expected_vpn_ip=device.ip)
+        db.add(node)
+        nodes_by_ip[device.ip] = node
+        names.add(name)
 
 
 def refresh_device_inventory(config: AppConfig) -> None:

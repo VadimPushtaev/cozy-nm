@@ -108,8 +108,15 @@ def _device_payload(device: Device, config, hostname: str = ""):
     }
 
 
-def _active_node_names(config) -> set[str]:
-    return {config.node_identifier(), *(known.name for known in config.topology_nodes())}
+def _active_node_names(db: Session, config) -> set[str]:
+    names = {config.node_identifier(), *(known.name for known in config.topology_nodes())}
+    device_ips = {ip for (ip,) in db.query(Device.ip).all()}
+    names.update(
+        name
+        for name, expected_vpn_ip in db.query(Node.name, Node.expected_vpn_ip).all()
+        if expected_vpn_ip in device_ips
+    )
+    return names
 
 
 def _visible_node_names(db: Session, active_node_names: set[str]) -> set[str]:
@@ -186,7 +193,18 @@ def _sshfs_mount_rows(db: Session, stale_after_seconds: int) -> list[dict]:
                 or _snapshot_is_stale(snapshot, stale_after_seconds),
             }
         )
-    return correlate_sshfs_mounts(entries)
+    device_names_by_ip = {device.ip: device.name for device in device_inventory(db)}
+    rows = correlate_sshfs_mounts(entries)
+    for row in rows:
+        row["initiator_name"] = device_names_by_ip.get(
+            row["initiator_ip"], row["initiator_node"].name
+        )
+        row["target_name"] = device_names_by_ip.get(row["target_ip"])
+        if not row["target_name"] and row["target_node"]:
+            row["target_name"] = row["target_node"].name
+        if not row["target_name"]:
+            row["target_name"] = row["target_host"]
+    return rows
 
 
 def _same_origin(request: Request) -> None:
@@ -215,7 +233,7 @@ def _bridge_form_payload(name: str, listen_port: int, target_host: str, target_p
 @router.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     config = get_config()
-    active_node_names = _active_node_names(config)
+    active_node_names = _active_node_names(db, config)
     visible_node_names = _visible_node_names(db, active_node_names)
     nodes = node_summary(db, config.stale_after_seconds, active_node_names)
     device_rows = _device_rows(db, config)
@@ -245,7 +263,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 @router.get("/nodes", response_class=HTMLResponse)
 def nodes_page(request: Request, db: Session = Depends(get_db)):
     config = get_config()
-    active_node_names = _active_node_names(config)
+    active_node_names = _active_node_names(db, config)
     return templates.TemplateResponse(
         request,
         "nodes.html",
@@ -263,6 +281,12 @@ def node_detail(request: Request, name: str, db: Session = Depends(get_db)):
     if node is None:
         raise HTTPException(status_code=404)
     snapshot = latest_snapshot(db, node.id)
+    device = (
+        db.query(Device)
+        .filter(Device.ip == node.expected_vpn_ip)
+        .order_by(Device.name)
+        .first()
+    )
     config = get_config()
     sshfs_mount_rows = [
         row
@@ -275,6 +299,7 @@ def node_detail(request: Request, name: str, db: Session = Depends(get_db)):
         "node_detail.html",
         {
             "node": node,
+            "device": device,
             "snapshot": snapshot,
             "snapshot_stale": bool(
                 snapshot and _snapshot_is_stale(snapshot, config.stale_after_seconds)
@@ -442,7 +467,7 @@ def bridge_project_action_route(request: Request, node_ip: str, action: str):
 @router.get("/warnings", response_class=HTMLResponse)
 def warnings_page(request: Request, db: Session = Depends(get_db)):
     config = get_config()
-    visible_node_names = _visible_node_names(db, _active_node_names(config))
+    visible_node_names = _visible_node_names(db, _active_node_names(db, config))
     warnings = _visible_warnings(db, visible_node_names, 200)
     return templates.TemplateResponse(request, "warnings.html", {"warnings": warnings})
 
@@ -450,7 +475,7 @@ def warnings_page(request: Request, db: Session = Depends(get_db)):
 @router.get("/api/v1/nodes")
 def api_nodes(db: Session = Depends(get_db)):
     config = get_config()
-    active_node_names = _active_node_names(config)
+    active_node_names = _active_node_names(db, config)
     return [
         {
             "name": row["node"].name,

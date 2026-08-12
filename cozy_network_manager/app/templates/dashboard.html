@@ -57,14 +57,14 @@
   <h2>SSHFS mounts</h2>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Initiator IP</th><th>Target IP</th><th>Dir on initiator</th><th>Dir on target</th><th>Windows dir on target</th></tr></thead>
+      <thead><tr><th>Initiator</th><th>Target</th><th>Dir on initiator</th><th>Dir on target</th><th>Windows dir on target</th></tr></thead>
       <tbody>
       {% for row in sshfs_mount_rows %}
         <tr>
-          <td class="mono nowrap"><a href="/nodes/{{ row.initiator_node.name }}">{{ row.initiator_ip }}</a></td>
-          <td class="mono nowrap">
+          <td class="nowrap"><a href="/nodes/{{ row.initiator_node.name }}">{{ row.initiator_name }}</a></td>
+          <td class="nowrap">
             {% if row.target_node %}<a href="/nodes/{{ row.target_node.name }}">{% endif %}
-            {{ row.target_ip or ('unknown (' ~ row.target_host ~ ')') }}
+            {{ row.target_name }}
             {% if row.target_node %}</a>{% endif %}
           </td>
           <td class="mono">{{ row.initiator_directory }}</td>
