@@ -8,7 +8,7 @@
   <h2>WireGuard devices</h2>
   <div class="table-scroll">
   <table class="device-table">
-    <thead><tr><th>Client</th><th>Hostname</th><th>IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th></tr></thead>
+    <thead><tr><th>Client</th><th>Hostname</th><th>IP</th><th>Public IP</th><th>WG</th><th>Ping</th><th>Minion</th><th>Last check</th></tr></thead>
     <tbody>
     {% for row in device_rows %}
       {% set device = row.device %}
@@ -20,9 +20,10 @@
         <td class="nowrap"><span class="badge {{ 'ok' if device.wg_connected else 'warn' }}">{{ 'connected' if device.wg_connected else 'down' }}</span></td>
         <td class="nowrap"><span class="badge {{ 'ok' if device.pingable else 'warn' }}">{{ 'ok' if device.pingable else 'fail' }}</span></td>
         <td class="nowrap"><span class="badge {{ 'ok' if device.minion_available else 'warn' }}">{{ 'ok' if device.minion_available else 'fail' }}</span></td>
+        <td class="nowrap">{{ device.last_checked_at }}</td>
       </tr>
     {% else %}
-      <tr><td colspan="7">No client-config or topology devices found in {{ device_subnets|join(', ') }} yet.</td></tr>
+      <tr><td colspan="8">No client-config or topology devices found in {{ device_subnets|join(', ') }} yet.</td></tr>
     {% endfor %}
     </tbody>
   </table>
