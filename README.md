@@ -7,7 +7,7 @@ The provided deployment runs everything in Docker. Keep the head and minion port
 ## Architecture
 
 - The **head** serves the HTML dashboard and read API, collects its own host snapshot, polls remote minions, scans WireGuard client configs, and refreshes DNS mappings.
-- A **minion** exposes `GET /health` and `GET /api/v1/snapshot` for host inspection, including VPN-reachable nginx and Transmission web interfaces. On allowlisted bridge hosts it also exposes bearer-token-protected bridge-management endpoints.
+- A **minion** exposes `GET /health` and `GET /api/v1/snapshot` for host inspection, including VPN-reachable nginx and Transmission web interfaces and active SSHFS/SFTP mount topology. On allowlisted bridge hosts it also exposes bearer-token-protected bridge-management endpoints.
 - **PostgreSQL** stores nodes, snapshots, device state, DNS results, manual metadata, and warnings.
 - The topology deployer starts PostgreSQL, the head, and a minion on the head host; other topology hosts run only a minion.
 
@@ -203,6 +203,14 @@ The Docker examples mount host paths so collectors can inspect the host:
 The head's Docker socket bind is marked read-only, while minions receive a read-write bind because bridge actions control containers. A read-only socket mount does not make the Docker API read-only: access to the daemon socket can still amount to host-level control. The configured bridge project directory is also writable by the minion. Run these containers only on trusted hosts.
 
 Snapshots report configured nginx and Transmission browser interfaces reachable through each node's VPN IP. nginx virtual hosts that share a protocol and port are collapsed into one interface. A configured interface remains visible as `down` when its service process or TCP listener is absent, and stale snapshots are labelled accordingly in the head UI. Raw service configuration and credentials are never included in snapshots.
+
+## SSHFS mount topology
+
+Minions inspect the host's active mount table and SSH server configuration. The head correlates an SSHFS mount reported by its initiating node with an exact-user `internal-sftp` chroot reported by the target node. The dashboard and both involved node pages then show the initiator IP, target IP, local mount directory, target host directory, and—when the target is WSL—the corresponding Windows directory.
+
+Only active `fuse.sshfs` mounts are shown; an unmounted `/etc/fstab` entry is not topology. Target details require a fresh target snapshot and a matching SSH username and port. If the initiator is fresh but the target is unavailable or cannot be identified, the UI keeps a partial row with the known endpoint and local directory.
+
+Windows paths are derived from active WSL DrvFS/9p mappings that overlap a reported SFTP chroot. Unrelated Windows drives are not included. Minions report paths and SFTP usernames needed for correlation, but do not report SSH keys, passwords, or file contents.
 
 ## Socat bridge management
 

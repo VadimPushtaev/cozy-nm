@@ -35,6 +35,32 @@
   </div>
 </section>
 
+<section class="panel">
+  <h2>SSHFS mounts</h2>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Initiator IP</th><th>Target IP</th><th>Dir on initiator</th><th>Dir on target</th><th>Windows dir on target</th></tr></thead>
+      <tbody>
+      {% for row in sshfs_mount_rows %}
+        <tr>
+          <td class="mono nowrap"><a href="/nodes/{{ row.initiator_node.name }}">{{ row.initiator_ip }}</a></td>
+          <td class="mono nowrap">
+            {% if row.target_node %}<a href="/nodes/{{ row.target_node.name }}">{% endif %}
+            {{ row.target_ip or ('unknown (' ~ row.target_host ~ ')') }}
+            {% if row.target_node %}</a>{% endif %}
+          </td>
+          <td class="mono">{{ row.initiator_directory }}</td>
+          <td class="mono">{{ row.target_directory or 'unknown' }}</td>
+          <td class="mono">{{ row.windows_directory or '' }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5">No active SSHFS mounts involving this node.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 {% if snapshot %}
 <section class="panel">
   <h2>Public interfaces</h2>

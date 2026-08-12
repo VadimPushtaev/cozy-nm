@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 from cozy_network_manager.app.config import get_config
 from cozy_network_manager.app.db.models import Device, DnsRecord, Node, SnapshotRecord, WarningEvent
 from cozy_network_manager.app.db.session import get_db
-from cozy_network_manager.app.services.devices import device_inventory
 from cozy_network_manager.app.services.bridge_client import (
     BridgeClientError,
     bridge_action as call_bridge_action,
@@ -21,6 +20,8 @@ from cozy_network_manager.app.services.bridge_client import (
     project_action as call_project_action,
     update_bridge as call_update_bridge,
 )
+from cozy_network_manager.app.services.devices import device_inventory
+from cozy_network_manager.app.services.mounts import correlate_sshfs_mounts
 from cozy_network_manager.app.services.nodes import latest_snapshot, node_summary
 from cozy_network_manager.app.ui.templates import templates
 
@@ -168,6 +169,21 @@ def _public_interface_rows(db: Session, stale_after_seconds: int) -> list[dict]:
     return sorted(rows, key=lambda row: (row["node"].name, row["service"], row["url"]))
 
 
+def _sshfs_mount_rows(db: Session, stale_after_seconds: int) -> list[dict]:
+    entries = []
+    for node in db.query(Node).order_by(Node.name).all():
+        snapshot = latest_snapshot(db, node.id)
+        entries.append(
+            {
+                "node": node,
+                "snapshot": snapshot.snapshot if snapshot else None,
+                "stale": snapshot is None
+                or _snapshot_is_stale(snapshot, stale_after_seconds),
+            }
+        )
+    return correlate_sshfs_mounts(entries)
+
+
 def _same_origin(request: Request) -> None:
     expected_host = request.headers.get("host", "")
     origin = request.headers.get("origin")
@@ -201,6 +217,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     devices = [row["device"] for row in device_rows]
     dns = db.query(DnsRecord).order_by(DnsRecord.hostname, DnsRecord.record_type).all()
     bridge_projects = _bridge_projects(db, config)
+    sshfs_mount_rows = _sshfs_mount_rows(db, config.stale_after_seconds)
     warnings = _visible_warnings(db, visible_node_names, 10)
     return templates.TemplateResponse(
         request,
@@ -212,6 +229,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "device_subnets": config.device_subnets,
             "dns_records": dns,
             "public_interface_rows": _public_interface_rows(db, config.stale_after_seconds),
+            "sshfs_mount_rows": sshfs_mount_rows,
             "forward_rows": _bridge_rows(bridge_projects),
             "bridge_projects": bridge_projects,
             "warnings": warnings,
@@ -241,6 +259,12 @@ def node_detail(request: Request, name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404)
     snapshot = latest_snapshot(db, node.id)
     config = get_config()
+    sshfs_mount_rows = [
+        row
+        for row in _sshfs_mount_rows(db, config.stale_after_seconds)
+        if row["initiator_node"].name == node.name
+        or (row["target_node"] and row["target_node"].name == node.name)
+    ]
     return templates.TemplateResponse(
         request,
         "node_detail.html",
@@ -250,6 +274,7 @@ def node_detail(request: Request, name: str, db: Session = Depends(get_db)):
             "snapshot_stale": bool(
                 snapshot and _snapshot_is_stale(snapshot, config.stale_after_seconds)
             ),
+            "sshfs_mount_rows": sshfs_mount_rows,
         },
     )
 

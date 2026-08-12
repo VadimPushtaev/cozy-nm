@@ -3,7 +3,10 @@ from __future__ import annotations
 from cozy_network_manager.app.schemas import (
     HostInfo,
     PublicInterface,
+    SftpExport,
+    SshfsMount,
     Snapshot,
+    WindowsPathMapping,
     WireGuardInterface,
     WireGuardPeer,
 )
@@ -27,6 +30,20 @@ def test_snapshot_schema_serializes():
                 status="up",
             )
         ],
+        sshfs_mounts=[
+            SshfsMount(
+                local_path="/mnt/files",
+                target_host="10.8.0.2",
+                username="files",
+                remote_path="/files",
+            )
+        ],
+        sftp_exports=[
+            SftpExport(username="files", chroot_directory="/srv/sftp/files")
+        ],
+        windows_path_mappings=[
+            WindowsPathMapping(linux_path="/srv/files", windows_path="D:\\files")
+        ],
     )
 
     data = snapshot.model_dump(mode="json")
@@ -38,6 +55,9 @@ def test_snapshot_schema_serializes():
     assert data["public_interfaces"] == [
         {"service": "nginx", "url": "http://10.8.0.1/", "status": "up"}
     ]
+    assert data["sshfs_mounts"][0]["target_port"] == 22
+    assert data["sftp_exports"][0]["chroot_directory"] == "/srv/sftp/files"
+    assert data["windows_path_mappings"][0]["windows_path"] == "D:\\files"
     assert data["timestamp"].endswith(("Z", "+00:00"))
 
 
@@ -45,3 +65,6 @@ def test_old_snapshot_payload_defaults_public_interfaces_to_empty():
     snapshot = Snapshot.model_validate({"node_name": "old-minion"})
 
     assert snapshot.public_interfaces == []
+    assert snapshot.sshfs_mounts == []
+    assert snapshot.sftp_exports == []
+    assert snapshot.windows_path_mappings == []

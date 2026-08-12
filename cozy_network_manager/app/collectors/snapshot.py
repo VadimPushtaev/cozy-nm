@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from cozy_network_manager.app.collectors.docker import collect_docker
 from cozy_network_manager.app.collectors.host import collect_host
+from cozy_network_manager.app.collectors.mounts import collect_mount_topology
 from cozy_network_manager.app.collectors.public_interfaces import collect_public_interfaces
 from cozy_network_manager.app.collectors.wireguard import collect_wireguard
 from cozy_network_manager.app.config import AppConfig
@@ -39,6 +40,17 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
         public_interfaces = []
         errors.append({"source": "public-interfaces", "message": str(exc)})
 
+    try:
+        sshfs_mounts, sftp_exports, windows_path_mappings, mount_warnings = (
+            collect_mount_topology(config.host_root)
+        )
+        warnings.extend(mount_warnings)
+    except Exception as exc:
+        sshfs_mounts = []
+        sftp_exports = []
+        windows_path_mappings = []
+        errors.append({"source": "mounts", "message": str(exc)})
+
     return Snapshot(
         node_name=config.node_name,
         host=host,
@@ -46,6 +58,9 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
         docker_containers=containers,
         socat_forwards=forwards,
         public_interfaces=public_interfaces,
+        sshfs_mounts=sshfs_mounts,
+        sftp_exports=sftp_exports,
+        windows_path_mappings=windows_path_mappings,
         warnings=warnings,
         errors=errors,
     )

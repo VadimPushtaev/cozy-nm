@@ -71,6 +71,25 @@ class PublicInterface(BaseModel):
     status: Literal["up", "down"]
 
 
+class SshfsMount(BaseModel):
+    local_path: str
+    target_host: str
+    target_port: int = 22
+    username: str | None = None
+    remote_path: str
+
+
+class SftpExport(BaseModel):
+    username: str
+    ports: list[int] = Field(default_factory=lambda: [22])
+    chroot_directory: str
+
+
+class WindowsPathMapping(BaseModel):
+    linux_path: str
+    windows_path: str
+
+
 class BridgeDefinitionInput(BaseModel):
     name: str
     listen_port: int
@@ -124,5 +143,8 @@ class Snapshot(BaseModel):
     docker_containers: list[DockerContainer] = Field(default_factory=list)
     socat_forwards: list[SocatForward] = Field(default_factory=list)
     public_interfaces: list[PublicInterface] = Field(default_factory=list)
+    sshfs_mounts: list[SshfsMount] = Field(default_factory=list)
+    sftp_exports: list[SftpExport] = Field(default_factory=list)
+    windows_path_mappings: list[WindowsPathMapping] = Field(default_factory=list)
     warnings: list[CollectorMessage] = Field(default_factory=list)
     errors: list[CollectorMessage] = Field(default_factory=list)
