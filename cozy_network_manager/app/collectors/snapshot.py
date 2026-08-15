@@ -6,7 +6,19 @@ from cozy_network_manager.app.collectors.mounts import collect_mount_topology
 from cozy_network_manager.app.collectors.public_interfaces import collect_public_interfaces
 from cozy_network_manager.app.collectors.wireguard import collect_wireguard
 from cozy_network_manager.app.config import AppConfig
-from cozy_network_manager.app.schemas import Snapshot
+from cozy_network_manager.app.schemas import PublicInterface, Snapshot
+
+
+def _merge_public_interfaces(
+    *groups: list[PublicInterface],
+) -> list[PublicInterface]:
+    by_key: dict[tuple[str, str], PublicInterface] = {}
+    for interface in (item for group in groups for item in group):
+        key = (interface.service, interface.url)
+        existing = by_key.get(key)
+        if existing is None or interface.status == "up":
+            by_key[key] = interface
+    return sorted(by_key.values(), key=lambda item: (item.service, item.url))
 
 
 def collect_snapshot(config: AppConfig) -> Snapshot:
@@ -24,11 +36,14 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
         errors.append({"source": "wireguard", "message": str(exc)})
 
     try:
-        containers, forwards, docker_warnings = collect_docker()
+        containers, forwards, docker_interfaces, docker_warnings = collect_docker(
+            config.node_ip
+        )
         warnings.extend(docker_warnings)
     except Exception as exc:
         containers = []
         forwards = []
+        docker_interfaces = []
         errors.append({"source": "docker", "message": str(exc)})
 
     try:
@@ -39,6 +54,8 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
     except Exception as exc:
         public_interfaces = []
         errors.append({"source": "public-interfaces", "message": str(exc)})
+
+    public_interfaces = _merge_public_interfaces(public_interfaces, docker_interfaces)
 
     try:
         sshfs_mounts, sftp_exports, windows_path_mappings, mount_warnings = (

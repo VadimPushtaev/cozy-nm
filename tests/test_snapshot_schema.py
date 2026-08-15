@@ -25,8 +25,8 @@ def test_snapshot_schema_serializes():
         ],
         public_interfaces=[
             PublicInterface(
-                service="nginx",
-                url="http://10.8.0.1/",
+                service="jellyfin",
+                url="http://10.8.0.1:8096/",
                 status="up",
             )
         ],
@@ -53,7 +53,11 @@ def test_snapshot_schema_serializes():
     assert data["host"]["public_ipv4"] == "203.0.113.10"
     assert data["wireguard"][0]["peers"][0]["allowed_ips"] == ["10.8.0.2/32"]
     assert data["public_interfaces"] == [
-        {"service": "nginx", "url": "http://10.8.0.1/", "status": "up"}
+        {
+            "service": "jellyfin",
+            "url": "http://10.8.0.1:8096/",
+            "status": "up",
+        }
     ]
     assert data["sshfs_mounts"][0]["target_port"] == 22
     assert data["sftp_exports"][0]["chroot_directory"] == "/srv/sftp/files"

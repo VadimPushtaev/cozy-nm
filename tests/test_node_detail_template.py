@@ -87,3 +87,52 @@ def test_node_detail_renders_head_status_without_a_minion_snapshot():
     assert "<h2>Public interfaces</h2>" not in html
     assert "<h2>WireGuard</h2>" not in html
     assert "<h2>Docker containers</h2>" not in html
+
+
+def test_node_detail_renders_recognized_jellyfin_interface():
+    request = SimpleNamespace(
+        state=SimpleNamespace(auth_configured=False, authenticated=False)
+    )
+    node = SimpleNamespace(
+        name="media",
+        expected_vpn_ip="10.46.0.6",
+        os_override=None,
+        manual_tags=[],
+        configured_tags=[],
+        notes="",
+    )
+    snapshot = SimpleNamespace(
+        collected_at="now",
+        snapshot={
+            "host": {
+                "hostname": "media",
+                "public_ipv4": None,
+                "os_name": "Linux",
+                "os_version": "",
+                "kernel_version": "kernel",
+                "architecture": "amd64",
+            },
+            "public_interfaces": [
+                {
+                    "service": "jellyfin",
+                    "url": "http://10.46.0.6:8096/",
+                    "status": "up",
+                }
+            ],
+            "wireguard": [],
+            "docker_containers": [],
+        },
+    )
+
+    html = templates.env.get_template("node_detail.html").render(
+        request=request,
+        node=node,
+        device=None,
+        snapshot=snapshot,
+        snapshot_stale=False,
+        sshfs_mount_rows=[],
+    )
+
+    assert "<h2>Public interfaces</h2>" in html
+    assert "jellyfin" in html
+    assert "http://10.46.0.6:8096/" in html
