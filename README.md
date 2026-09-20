@@ -202,7 +202,7 @@ The Docker examples mount host paths so collectors can inspect the host:
 
 The head's Docker socket bind is marked read-only, while minions receive a read-write bind because bridge actions control containers. A read-only socket mount does not make the Docker API read-only: access to the daemon socket can still amount to host-level control. The configured bridge project directory is also writable by the minion. Run these containers only on trusted hosts.
 
-Snapshots report configured nginx and Transmission browser interfaces reachable through each node's VPN IP. nginx virtual hosts that share a protocol and port are collapsed into one interface. A configured interface remains visible as `down` when its service process or TCP listener is absent, and stale snapshots are labelled accordingly in the head UI. Raw service configuration and credentials are never included in snapshots.
+Snapshots report configured nginx and Transmission browser interfaces reachable through each node's VPN IP. nginx virtual hosts that share a protocol and port are collapsed into one VPN interface. nginx sites with concrete DNS hostnames bound to globally routable or wildcard addresses are also reported by hostname; private-address-only bindings are not. A configured interface remains visible as `down` when its service process or TCP listener is absent, and stale snapshots are labelled accordingly in the head UI. `up` means the local listener is active; it does not verify DNS routing or the HTTP response. Raw service configuration and credentials are never included in snapshots.
 
 ## SSHFS mount topology
 

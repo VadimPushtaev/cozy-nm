@@ -66,7 +66,7 @@ def test_collects_and_deduplicates_vpn_web_interfaces(tmp_path: Path):
     _write_proc(
         tmp_path,
         ["systemd", "nginx", "transmission-da"],
-        [("0.0.0.0", 80), ("10.46.0.6", 443), ("10.46.0.6", 9091)],
+        [("0.0.0.0", 80), ("0.0.0.0", 443), ("10.46.0.6", 9091)],
     )
 
     interfaces, warnings = collect_public_interfaces(str(tmp_path), "10.46.0.6")
@@ -74,6 +74,7 @@ def test_collects_and_deduplicates_vpn_web_interfaces(tmp_path: Path):
     assert [item.model_dump() for item in interfaces] == [
         {"service": "nginx", "url": "http://10.46.0.6/", "status": "up"},
         {"service": "nginx", "url": "https://10.46.0.6/", "status": "up"},
+        {"service": "nginx", "url": "https://secure.example/", "status": "up"},
         {
             "service": "transmission",
             "url": "http://10.46.0.6:9091/transmission/web/",
@@ -82,6 +83,41 @@ def test_collects_and_deduplicates_vpn_web_interfaces(tmp_path: Path):
     ]
     assert warnings == []
     assert "secret" not in repr(interfaces)
+
+
+def test_collects_named_sites_bound_to_public_addresses(tmp_path: Path):
+    _write_nginx(
+        tmp_path,
+        """
+        server {
+            listen 93.184.216.34:80;
+            server_name FILES.example.com. mirror.example.com *.example.com _;
+        }
+        server {
+            listen 93.184.216.34:443 ssl;
+            server_name secure.example.com;
+        }
+        server {
+            listen 10.46.0.6:8080;
+            server_name internal.example.com;
+        }
+        """,
+    )
+    _write_proc(
+        tmp_path,
+        ["systemd", "nginx"],
+        [("93.184.216.34", 80), ("10.46.0.6", 8080)],
+    )
+
+    interfaces, warnings = collect_public_interfaces(str(tmp_path), "10.46.0.6")
+
+    assert [(item.url, item.status) for item in interfaces] == [
+        ("http://10.46.0.6:8080/", "up"),
+        ("http://files.example.com/", "up"),
+        ("http://mirror.example.com/", "up"),
+        ("https://secure.example.com/", "down"),
+    ]
+    assert warnings == []
 
 
 def test_configured_interfaces_remain_visible_when_services_are_down(tmp_path: Path):

@@ -252,22 +252,66 @@ def _parse_listen(arguments: list[str]) -> _Listener | None:
     return _Listener(address=address, port=port, ssl=ssl or port == 443)
 
 
+def _nginx_hostname(value: str) -> str | None:
+    hostname = value.rstrip(".").lower()
+    if len(hostname) > 253 or "." not in hostname or not hostname.isascii():
+        return None
+    labels = hostname.split(".")
+    if any(
+        not 1 <= len(label) <= 63
+        or not label[0].isalnum()
+        or not label[-1].isalnum()
+        or any(not (char.isalnum() or char == "-") for char in label)
+        for label in labels
+    ):
+        return None
+    try:
+        ip_address(hostname)
+    except ValueError:
+        return hostname
+    return None
+
+
+def _is_public_bind(address: str) -> bool:
+    try:
+        return ip_address(address).is_global
+    except ValueError:
+        return False
+
+
 def _nginx_listeners(host_root: Path, node_ip: str):
     reader = _NginxConfigReader(host_root)
     config_path = host_root / "etc/nginx/nginx.conf"
     if not config_path.exists():
-        return [], []
+        return [], [], []
     directives = reader.read()
-    listeners: set[_Listener] = set()
+    vpn_listeners: set[_Listener] = set()
+    public_sites: set[tuple[_Listener, str]] = set()
     for server in _walk_blocks(directives, "server"):
         listen_directives = [item for item in server.children or [] if item.name == "listen"]
         parsed = [_parse_listen(item.arguments) for item in listen_directives]
         if not listen_directives:
             parsed = [_Listener(address="0.0.0.0", port=80)]
+        hostnames = {
+            hostname
+            for item in server.children or []
+            if item.name == "server_name"
+            for value in item.arguments
+            if (hostname := _nginx_hostname(value)) is not None
+        }
         for listener in parsed:
             if listener and listener.address in {*_WILDCARD_ADDRESSES, node_ip}:
-                listeners.add(listener)
-    return sorted(listeners, key=lambda item: (item.port, item.ssl, item.address)), reader.warnings
+                vpn_listeners.add(listener)
+            if listener and (
+                listener.address in _WILDCARD_ADDRESSES
+                or _is_public_bind(listener.address)
+            ):
+                public_sites.update((listener, hostname) for hostname in hostnames)
+    return (
+        sorted(vpn_listeners, key=lambda item: (item.port, item.ssl, item.address)),
+        sorted(public_sites, key=lambda item: (item[0].port, item[0].address, item[1])),
+        reader.warnings,
+    )
 
 
 def _decode_proc_address(value: str, ipv6: bool):
@@ -314,10 +358,10 @@ def _port_is_open(listeners: set[tuple[str, int]], node_ip: str, port: int) -> b
     )
 
 
-def _vpn_url(node_ip: str, port: int, ssl: bool = False, path: str = "/") -> str:
+def _interface_url(host: str, port: int, ssl: bool = False, path: str = "/") -> str:
     scheme = "https" if ssl else "http"
     default_port = 443 if ssl else 80
-    authority = node_ip if port == default_port else f"{node_ip}:{port}"
+    authority = host if port == default_port else f"{host}:{port}"
     normalized_path = "/" + path.strip("/")
     if normalized_path != "/":
         normalized_path += "/"
@@ -334,12 +378,18 @@ def _collect_nginx(
     processes: set[str],
     tcp_listeners: set[tuple[str, int]],
 ):
-    configured, warnings = _nginx_listeners(host_root, node_ip)
+    configured, public_sites, warnings = _nginx_listeners(host_root, node_ip)
     running = "nginx" in processes
     by_url: dict[str, PublicInterface] = {}
     for listener in configured:
-        url = _vpn_url(node_ip, listener.port, listener.ssl)
+        url = _interface_url(node_ip, listener.port, listener.ssl)
         up = running and _port_is_open(tcp_listeners, node_ip, listener.port)
+        existing = by_url.get(url)
+        status = "up" if up or (existing and existing.status == "up") else "down"
+        by_url[url] = PublicInterface(service="nginx", url=url, status=status)
+    for listener, hostname in public_sites:
+        url = _interface_url(hostname, listener.port, listener.ssl)
+        up = running and _port_is_open(tcp_listeners, listener.address, listener.port)
         existing = by_url.get(url)
         status = "up" if up or (existing and existing.status == "up") else "down"
         by_url[url] = PublicInterface(service="nginx", url=url, status=status)
@@ -399,7 +449,7 @@ def _collect_transmission(
     return [
         PublicInterface(
             service="transmission",
-            url=_vpn_url(node_ip, port, ssl, path),
+            url=_interface_url(node_ip, port, ssl, path),
             status=status,
         )
     ], warnings

@@ -75,7 +75,7 @@
   <h2>Public interfaces</h2>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Service</th><th>VPN URL</th><th>Status</th></tr></thead>
+      <thead><tr><th>Service</th><th>URL</th><th>Status</th></tr></thead>
       <tbody>
       {% for interface in snapshot.snapshot.get('public_interfaces', []) %}
         {% set interface_status = 'stale' if snapshot_stale else interface.status %}
