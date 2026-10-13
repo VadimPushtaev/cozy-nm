@@ -34,6 +34,7 @@
 
 <section class="panel">
   <h2>Public interfaces</h2>
+  <p class="muted">Status reflects the collector's observation, not an external firewall check.</p>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Node</th><th>Service</th><th>URL</th><th>Status</th></tr></thead>
@@ -46,7 +47,7 @@
           <td><span class="badge {{ 'ok' if row.status == 'up' else 'warn' }}">{{ row.status }}</span></td>
         </tr>
       {% else %}
-        <tr><td colspan="4">No VPN web interfaces reported.</td></tr>
+        <tr><td colspan="4">No web interfaces reported.</td></tr>
       {% endfor %}
       </tbody>
     </table>

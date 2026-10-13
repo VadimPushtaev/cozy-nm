@@ -18,6 +18,33 @@ The head read API includes:
 - `GET /api/v1/nodes/{name}`
 - `GET /api/v1/snapshots/{name}`
 
+## Public interfaces
+
+The dashboard and node pages list recognized nginx, Transmission and Jellyfin
+interfaces plus automatically detected web services on running Docker containers'
+published IPv4 TCP ports. Each service/port gets its own link. Loopback bindings,
+UDP, unpublished ports and general host-process discovery are excluded.
+
+Prefer a public hostname for a node's publicly bound Docker services with:
+
+```yaml
+public_hostnames:
+  10.46.0.5: fi.pushtaev.ru
+```
+
+Without a hostname, links use the observed public IPv4 when available, then the
+VPN address. VPN-only bindings always retain their VPN address. Existing
+specialized service discovery keeps its established URLs.
+
+Discovery sends a streamed GET to `/`, trying HTTP and HTTPS without following
+redirects or reading bodies. Redirects and authentication responses count as web
+interfaces; HTTP 5xx responses appear as down. Ports that do not respond with HTTP
+are omitted. TLS detection accepts self-signed certificates and does not certify
+TLS trust. Checks use eight concurrent probes, one-second request limits and a
+four-second total budget; an exhausted budget produces a collector warning.
+Status describes the collector's observation, not external firewall reachability.
+Old snapshots continue to use the existing stale indicator.
+
 ## Topology deployment
 
 Prerequisites:

@@ -13,6 +13,10 @@ wireguard_clients_path: /host/wireguard/clients
 # The deployment head also runs a minion, so this must differ from listen_port.
 minion_port: 8001
 public_ipv4_url: https://ifconfig.me/ip
+# Preferred public hostname for Docker web services, keyed by node VPN IPv4.
+# public_hostnames:
+#   10.46.0.5: fi.pushtaev.ru
+public_hostnames: {}
 head_auth_file: .cozy-nm/head-auth.json
 head_auth_session_days: 30
 head_auth_cookie_secure: false

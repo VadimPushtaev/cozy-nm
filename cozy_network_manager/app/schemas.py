@@ -66,7 +66,7 @@ class SocatForward(BaseModel):
 
 
 class PublicInterface(BaseModel):
-    service: Literal["jellyfin", "nginx", "transmission"]
+    service: str = Field(min_length=1)
     url: str
     status: Literal["up", "down"]
 

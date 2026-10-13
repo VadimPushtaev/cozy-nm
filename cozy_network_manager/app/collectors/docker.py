@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from ipaddress import IPv4Address
+
+from cozy_network_manager.app.collectors.docker_web import discover_web_interfaces, web_candidates
 
 from cozy_network_manager.app.collectors.socat import (
     SOCAT_BRIDGE_ENV_KEYS,
@@ -94,6 +97,8 @@ def detect_docker_public_interfaces(
 
 def collect_docker(
     node_ip: str | None = None,
+    public_hostname: str | None = None,
+    public_ipv4: str | None = None,
 ) -> tuple[
     list[DockerContainer],
     list[SocatForward],
@@ -118,6 +123,7 @@ def collect_docker(
     collected: list[DockerContainer] = []
     interfaces: list[PublicInterface] = []
     warnings: list[CollectorMessage] = []
+    candidates = []
     for container in containers:
         try:
             attrs = container.attrs
@@ -136,10 +142,17 @@ def collect_docker(
                 )
             )
             interfaces.extend(detect_docker_public_interfaces(attrs, node_ip))
+            if not _is_jellyfin_image(config.get("Image")):
+                candidates.extend(web_candidates(
+                    attrs, container.name, node_ip, public_hostname, public_ipv4,
+                ))
         except Exception as exc:
             warnings.append(
                 CollectorMessage(source="docker", message=f"failed to inspect container: {exc}")
             )
+    discovered, probe_warnings = asyncio.run(discover_web_interfaces(candidates))
+    interfaces.extend(discovered)
+    warnings.extend(probe_warnings)
     interfaces = sorted(
         {(item.service, item.url): item for item in interfaces}.values(),
         key=lambda item: (item.service, item.url),

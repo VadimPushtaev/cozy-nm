@@ -37,7 +37,9 @@ def collect_snapshot(config: AppConfig) -> Snapshot:
 
     try:
         containers, forwards, docker_interfaces, docker_warnings = collect_docker(
-            config.node_ip
+            config.node_ip,
+            public_hostname=config.public_hostnames.get(config.node_ip or ""),
+            public_ipv4=host.public_ipv4,
         )
         warnings.extend(docker_warnings)
     except Exception as exc:

@@ -93,6 +93,7 @@ class AppConfig(BaseModel):
     wireguard_clients_path: str = "/host/wireguard/clients"
     minion_port: int = 8001
     public_ipv4_url: str = "https://ifconfig.me/ip"
+    public_hostnames: dict[str, str] = Field(default_factory=dict)
     known_nodes: list[KnownNode] = Field(default_factory=list)
     minions: list[str] = Field(default_factory=list)
     deployment: DeploymentConfig = Field(default_factory=DeploymentConfig)
@@ -115,6 +116,24 @@ class AppConfig(BaseModel):
         if value <= 0:
             raise ValueError("must be greater than zero")
         return value
+
+    @field_validator("public_hostnames")
+    @classmethod
+    def valid_public_hostnames(cls, values: dict[str, str]) -> dict[str, str]:
+        from ipaddress import IPv4Address
+        import re
+
+        result = {}
+        for node_ip, hostname in values.items():
+            node_ip = str(IPv4Address(node_ip))
+            hostname = hostname.strip().rstrip(".").lower()
+            if len(hostname) > 253 or "." not in hostname or any(
+                not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+                for label in hostname.split(".")
+            ):
+                raise ValueError("public_hostnames values must be DNS hostnames without scheme, port or path")
+            result[node_ip] = hostname
+        return result
 
     def dns_hostnames(self) -> list[str]:
         return sorted(
